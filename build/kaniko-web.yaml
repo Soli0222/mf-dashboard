@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-build-web
+  namespace: mf-dashboard
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:latest
+          args:
+            - "--dockerfile=apps/web/Dockerfile"
+            - "--context=git://github.com/Soli0222/mf-dashboard.git#refs/heads/migrate-to-kubernetes"
+            - "--destination=registry.str08.net/soli0222/mf-web:0.1.0"
+            - "--cache=true"
+            - "--insecure"
+      restartPolicy: Never
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-build-crawler
+  namespace: mf-dashboard
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:latest
+          args:
+            - "--dockerfile=apps/crawler/Dockerfile"
+            - "--context=git://github.com/Soli0222/mf-dashboard.git#refs/heads/migrate-to-kubernetes"
+            - "--destination=registry.str08.net/soli0222/mf-crawler:0.1.0"
+            - "--insecure"
+      restartPolicy: Never
