@@ -3,7 +3,9 @@ import type { Page } from "playwright";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { debug, info, warn } from "../logger.js";
 
-const MAX_WAIT_TIME_MS = 20 * 60 * 1000; // 20 minutes max
+const MAX_WAIT_TIME_MS = process.env.CRAWLER_TIMEOUT_MS
+  ? Number(process.env.CRAWLER_TIMEOUT_MS)
+  : 20 * 60 * 1000; // 20 minutes max
 const POLL_INTERVAL_MS = 30000; // 30 seconds
 
 async function navigateToAccountsPage(page: Page): Promise<void> {

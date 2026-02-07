@@ -36,6 +36,8 @@ spec:
               env:
                 - name: DB_PATH
                   value: /data/moneyforward.db
+                - name: CRAWLER_TIMEOUT_MS
+                  value: {{ .Values.crawler.timeoutMs | quote }}
               volumeMounts:
                 - name: data
                   mountPath: /data

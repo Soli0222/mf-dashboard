@@ -7,7 +7,7 @@ crawler:
   image:
     repository: registry.str08.net/soli0222/mf-crawler
     tag: "0.1.0"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   resources:
     requests:
       memory: "512Mi"
@@ -15,12 +15,15 @@ crawler:
     limits:
       memory: "2Gi"
       cpu: "1000m"
+  timeoutMs: 1200000 # 20分
+  # デプロイ時に init container としてクローラーを実行するかどうか
+  initOnDeploy: false
 
 web:
   image:
     repository: registry.str08.net/soli0222/mf-web
     tag: "0.1.0"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   replicaCount: 1
   resources:
     requests:
@@ -33,8 +36,8 @@ web:
 # CronJob 設定
 cronjob:
   schedules:
-    - "50 21 * * *"    # JST 6:50
-    - "20 6 * * *"     # JST 15:20
+    - "50 21 * * *" # JST 6:50
+    - "20 6 * * *" # JST 15:20
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -50,7 +53,7 @@ persistence:
 
 # 認証情報
 credentials:
-  existingSecret: ""
+  existingSecret: "mf-dashboard-credentials"
   mfUsername: ""
   mfPassword: ""
   mfTotpSecret: ""
@@ -64,14 +67,18 @@ slack:
 # Ingress 設定
 ingress:
   enabled: true
-  className: nginx
-  annotations: {}
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
   hosts:
-    - host: mf-dashboard.example.com
+    - host: mf-dashboard.str08.net
       paths:
         - path: /
           pathType: Prefix
-  tls: []
+  tls:
+    - hosts:
+        - mf-dashboard.str08.net
+      secretName: mf-dashboard.str08.net-dns01
 
 # Service 設定
 service:
