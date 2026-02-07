@@ -15,7 +15,7 @@
 5. [詳細設計](#詳細設計)
 6. [実装フェーズ](#実装フェーズ)
 7. [動作検証](#動作検証)
-8. [ロールバック計画](#ロールバック計画)
+8. [移行チェックリスト](#移行チェックリスト)
 
 ---
 
@@ -37,7 +37,7 @@
 
 ---
 
-## 現行アーキテクチャと課題
+## 現行アーキテクチャ
 
 ### 現行構成
 
@@ -49,15 +49,6 @@ graph LR
     D -->|トリガー| E[Cloudflare Pages]
     E -->|ホスト| F[Web Dashboard]
 ```
-
-### 課題
-
-| 課題                           | 詳細                                                           |
-| ------------------------------ | -------------------------------------------------------------- |
-| GitHub Actions 依存            | 実行環境の制御が限定的、ログの長期保存が困難                   |
-| 1Password 依存                 | Service Account の管理コスト、SDK の日本語非対応               |
-| Cloudflare 依存                | プライベートネットワーク内での運用が困難                       |
-| SQLite の Git 管理             | DB ファイルの履歴がリポジトリを肥大化、差分管理が非効率        |
 
 ---
 
@@ -673,38 +664,38 @@ CMD ["node", "apps/web/server.js"]
 
 ## 実装フェーズ
 
-### Phase 1: 認証ロジックの変更（1-2日）
+### Phase 1: 認証ロジックの変更
 
 1. `apps/crawler/src/auth/credentials.ts` を環境変数ベースに変更
 2. `otpauth` パッケージを追加して TOTP 生成を実装
 3. `@1password/sdk` 依存を削除
 4. ローカルで動作確認
 
-### Phase 2: データベースパスの外部化（0.5日）
+### Phase 2: データベースパスの外部化
 
 1. `packages/db` の DB パスを環境変数で設定可能に変更
 2. `apps/crawler` と `apps/web` で環境変数を使用するよう変更
 
-### Phase 3: Docker イメージ作成（1日）
+### Phase 3: Docker イメージ作成
 
 1. Crawler 用 Dockerfile 作成
 2. Web 用 Dockerfile 作成
 3. ローカルでビルド・動作確認
 
-### Phase 4: Helm Chart 作成（1-2日）
+### Phase 4: Helm Chart 作成
 
 1. `charts/mf-dashboard/` ディレクトリ構成作成
 2. `Chart.yaml`, `values.yaml` 作成
 3. 各テンプレートファイル作成
 
-### Phase 5: デプロイと検証（1日）
+### Phase 5: デプロイと検証
 
 1. 開発クラスタへデプロイ
 2. CronJob の手動実行テスト
 3. Web ダッシュボードの動作確認
 4. エンドツーエンドテスト
 
-### Phase 6: 本番移行（0.5日）
+### Phase 6: 本番移行
 
 1. 本番クラスタへデプロイ
 2. 既存データの移行（SQLite ファイルコピー）
@@ -737,29 +728,6 @@ kubectl logs -l job-name=mf-crawler-xxxxx
 # Web Pod ログ
 kubectl logs -l app=mf-web
 ```
-
----
-
-## ロールバック計画
-
-移行に問題が発生した場合のロールバック手順。
-
-### 即時ロールバック
-
-1. Helm リリースを削除
-   ```bash
-   helm uninstall mf-dashboard --namespace mf-dashboard
-   ```
-
-2. GitHub Actions を再有効化
-   - `RUN_TASK` 変数を `true` に設定
-
-3. Cloudflare Pages を再有効化
-   - Git push で自動デプロイ再開
-
-### データ復旧
-
-- PVC 内の SQLite を Git リポジトリに再コミット
 
 ---
 
