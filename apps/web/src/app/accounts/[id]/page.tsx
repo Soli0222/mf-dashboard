@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getAccountByMfId, getAllAccountMfIds } from "@moneyforward-daily-action/db";
+import { getAccountByMfId } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { notFound } from "next/navigation";
 import { AccountSummaryCard } from "../../../components/info/account-summary-card";
@@ -10,11 +10,6 @@ import { PageLayout } from "../../../components/layout/page-layout";
 import { AccountStatusBadge } from "../../../components/ui/account-status-badge";
 import { Badge } from "../../../components/ui/badge";
 import { formatLastUpdated } from "../../../lib/format";
-
-export async function generateStaticParams() {
-  const mfIds = getAllAccountMfIds();
-  return mfIds.map((id) => ({ id }));
-}
 
 export async function generateMetadata({ params }: PageProps<"/accounts/[id]">): Promise<Metadata> {
   const { id } = await params;

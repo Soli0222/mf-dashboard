@@ -8,6 +8,9 @@ import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
 
+// Force dynamic rendering to avoid database access during build
+export const dynamic = "force-dynamic";
+
 const metadataBase =
   process.env.GITHUB_PAGES === "true"
     ? new URL(

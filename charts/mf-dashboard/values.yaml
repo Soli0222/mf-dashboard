@@ -1,0 +1,88 @@
+# 共通設定
+nameOverride: ""
+fullnameOverride: ""
+
+# イメージ設定
+crawler:
+  image:
+    repository: registry.str08.net/soli0222/mf-crawler
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+web:
+  image:
+    repository: registry.str08.net/soli0222/mf-web
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# CronJob 設定
+cronjob:
+  schedules:
+    - "50 21 * * *"    # JST 6:50
+    - "20 6 * * *"     # JST 15:20
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  backoffLimit: 2
+
+# 永続化設定
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  existingClaim: ""
+
+# 認証情報
+credentials:
+  existingSecret: ""
+  mfUsername: ""
+  mfPassword: ""
+  mfTotpSecret: ""
+
+# Slack 通知（オプション）
+slack:
+  enabled: false
+  botToken: ""
+  channelId: ""
+
+# Ingress 設定
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: mf-dashboard.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Service 設定
+service:
+  type: ClusterIP
+  port: 80
+
+# Pod Affinity（PVC 共有のため同一ノードに配置）
+affinity:
+  podAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mf-dashboard
+        topologyKey: kubernetes.io/hostname

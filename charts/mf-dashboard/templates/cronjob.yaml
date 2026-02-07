@@ -1,0 +1,48 @@
+{{- range $index, $schedule := .Values.cronjob.schedules }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "mf-dashboard.fullname" $ }}-crawler-{{ $index }}
+  labels:
+    {{- include "mf-dashboard.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: crawler
+spec:
+  schedule: {{ $schedule | quote }}
+  concurrencyPolicy: {{ $.Values.cronjob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ $.Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $.Values.cronjob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $.Values.cronjob.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "mf-dashboard.labels" $ | nindent 12 }}
+            app.kubernetes.io/component: crawler
+        spec:
+          restartPolicy: OnFailure
+          {{- with $.Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: crawler
+              image: "{{ $.Values.crawler.image.repository }}:{{ $.Values.crawler.image.tag }}"
+              imagePullPolicy: {{ $.Values.crawler.image.pullPolicy }}
+              envFrom:
+                - secretRef:
+                    name: {{ $.Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" $)) }}
+              env:
+                - name: DB_PATH
+                  value: /data/moneyforward.db
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+              resources:
+                {{- toYaml $.Values.crawler.resources | nindent 16 }}
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ $.Values.persistence.existingClaim | default (printf "%s-data" (include "mf-dashboard.fullname" $)) }}
+{{- end }}
