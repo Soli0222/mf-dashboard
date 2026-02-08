@@ -16,8 +16,8 @@ crawler:
       memory: "2Gi"
       cpu: "1000m"
   timeoutMs: 1200000 # 20分
-  # デプロイ時に init container としてクローラーを実行するかどうか
-  initOnDeploy: false
+  # helm install 時に post-install hook Job としてクローラーを実行するかどうか
+  initOnInstall: false
 
 web:
   image:

@@ -17,33 +17,6 @@ spec:
         {{- include "mf-dashboard.labels" . | nindent 8 }}
         app.kubernetes.io/component: web
     spec:
-      {{- if .Values.crawler.initOnDeploy }}
-      initContainers:
-        - name: init-crawler
-          image: "{{ .Values.crawler.image.repository }}:{{ .Values.crawler.image.tag }}"
-          imagePullPolicy: {{ .Values.crawler.image.pullPolicy }}
-          env:
-            {{- include "mf-dashboard.databaseEnv" . | nindent 12 }}
-            - name: CRAWLER_TIMEOUT_MS
-              value: {{ .Values.crawler.timeoutMs | quote }}
-            - name: MF_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
-                  key: MF_USERNAME
-            - name: MF_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
-                  key: MF_PASSWORD
-            - name: MF_TOTP_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
-                  key: MF_TOTP_SECRET
-          resources:
-            {{- toYaml .Values.crawler.resources | nindent 12 }}
-      {{- end }}
       containers:
         - name: web
           image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
