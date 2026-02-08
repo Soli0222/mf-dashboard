@@ -2,9 +2,10 @@
 
 import { Scale } from "lucide-react";
 import { useState, useEffect } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
+import { ClientResponsiveContainer } from "../charts/client-responsive-container";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
@@ -89,7 +90,7 @@ export function BalanceSheetChartClient({
         <CardTitle icon={Scale}>バランスシート</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={isMobile ? 280 : 400}>
+        <ClientResponsiveContainer width="100%" height={isMobile ? 280 : 400}>
           <BarChart
             data={chartData}
             margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
@@ -133,7 +134,7 @@ export function BalanceSheetChartClient({
             {/* 純資産 */}
             <Bar dataKey="純資産" stackId="stack" fill={semanticColors.netAssets} name="純資産" />
           </BarChart>
-        </ResponsiveContainer>
+        </ClientResponsiveContainer>
       </CardContent>
     </Card>
   );

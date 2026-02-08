@@ -2,11 +2,12 @@
 
 import { PieChart as PieChartIcon } from "lucide-react";
 import { useState } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import { COMPARISON_PERIOD_OPTIONS, type ComparisonPeriod } from "../../lib/chart";
 import { getAssetCategoryColor } from "../../lib/colors";
 import { formatCurrency } from "../../lib/format";
 import { chartTooltipStyle } from "../charts/chart-tooltip";
+import { ClientResponsiveContainer } from "../charts/client-responsive-container";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
@@ -85,7 +86,7 @@ export function AssetBreakdownChartClient({
       <CardContent>
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
           <div className="w-32 h-32 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
+            <ClientResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={chartData}
@@ -105,7 +106,7 @@ export function AssetBreakdownChartClient({
                   contentStyle={chartTooltipStyle}
                 />
               </PieChart>
-            </ResponsiveContainer>
+            </ClientResponsiveContainer>
           </div>
           <div className="flex-1 min-w-0 w-full space-y-2 text-sm">
             {chartData.map((item) => {

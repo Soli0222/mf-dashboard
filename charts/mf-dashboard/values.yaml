@@ -1,0 +1,89 @@
+# 共通設定
+nameOverride: ""
+fullnameOverride: ""
+
+# イメージ設定
+crawler:
+  image:
+    repository: ghcr.io/soli0222/mf-dashboard-crawler
+    tag: ""
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  timeoutMs: 1200000 # 20分
+  # helm install 時に post-install hook Job としてクローラーを実行するかどうか
+  initOnInstall: true
+
+web:
+  image:
+    repository: ghcr.io/soli0222/mf-dashboard-web
+    tag: ""
+    pullPolicy: Always
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# CronJob 設定
+cronjob:
+  schedules:
+    - "30 10 * * *" # JST 10:30
+    - "30 18 * * *" # JST 18:30
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  backoffLimit: 2
+
+# データベース設定
+database:
+  # 接続情報
+  host: ""
+  port: "5432"
+  user: ""
+  password: ""
+  name: ""
+  # 既存の Secret からパスワードを取得する場合
+  existingSecret:
+    name: ""        # Secret 名（空の場合は自動生成 Secret を使用）
+    passwordKey: ""  # Secret 内のパスワードのキー名
+
+# 認証情報
+credentials:
+  # 既存の Secret 名（空の場合は自動生成 Secret を使用）
+  existingSecret: ""
+  mfUsername: ""
+  mfPassword: ""
+  mfTotpSecret: ""
+  revalidationToken: ""
+
+# Slack 通知（オプション）
+slack:
+  enabled: false
+  botToken: ""
+  channelId: ""
+
+# Ingress 設定
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Service 設定
+service:
+  type: ClusterIP
+  port: 80

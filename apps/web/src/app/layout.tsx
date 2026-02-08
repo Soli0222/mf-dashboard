@@ -8,15 +8,11 @@ import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
 
-const metadataBase =
-  process.env.GITHUB_PAGES === "true"
-    ? new URL(
-        `https://${process.env.NEXT_PUBLIC_GITHUB_ORG}.github.io/${process.env.NEXT_PUBLIC_GITHUB_REPO}/`,
-      )
-    : undefined;
+// Revalidate every hour as a fallback; primary cache invalidation is via on-demand revalidation
+// from the crawler's POST /api/revalidate call after each scrape.
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  metadataBase,
   title: {
     template: "%s | MoneyForward Me Dashboard",
     default: "MoneyForward Me Dashboard",

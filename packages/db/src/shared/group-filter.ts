@@ -3,26 +3,24 @@ import type { Db } from "../index";
 import { schema } from "../index";
 
 /** 現在のグループID（isCurrent=true）を取得 */
-export function getDefaultGroupId(db: Db): string | null {
-  const currentGroup = db
+export async function getDefaultGroupId(db: Db): Promise<string | null> {
+  const rows = await db
     .select({ id: schema.groups.id })
     .from(schema.groups)
-    .where(eq(schema.groups.isCurrent, true))
-    .get();
-  return currentGroup?.id ?? null;
+    .where(eq(schema.groups.isCurrent, true));
+  return rows[0]?.id ?? null;
 }
 
 /** グループIDを解決（指定がなければデフォルトを使用） */
-export function resolveGroupId(db: Db, groupId?: string): string | null {
-  return groupId ?? getDefaultGroupId(db);
+export async function resolveGroupId(db: Db, groupId?: string): Promise<string | null> {
+  return groupId ?? (await getDefaultGroupId(db));
 }
 
 /** グループに属するアカウントIDリストを取得 */
-export function getAccountIdsForGroup(db: Db, groupId: string): number[] {
-  const groupAccounts = db
+export async function getAccountIdsForGroup(db: Db, groupId: string): Promise<number[]> {
+  const groupAccounts = await db
     .select({ accountId: schema.groupAccounts.accountId })
     .from(schema.groupAccounts)
-    .where(eq(schema.groupAccounts.groupId, groupId))
-    .all();
+    .where(eq(schema.groupAccounts.groupId, groupId));
   return groupAccounts.map((ga) => ga.accountId);
 }

@@ -1,22 +1,22 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import { migrate } from "drizzle-orm/pglite/migrator";
 import { join } from "node:path";
 import * as schema from "./schema/schema";
 
-type Db = ReturnType<typeof drizzle<typeof schema>>;
+type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 /**
- * テスト用のインメモリ DB を作成し、マイグレーションを適用して返す。
+ * テスト用のインメモリ PostgreSQL DB を作成し、マイグレーションを適用して返す。
  * beforeAll で1回だけ呼び出し、テスト間は resetTestDb でデータをクリアする。
  */
-export function createTestDb(): Db {
-  const sqlite = new Database(":memory:");
-  sqlite.pragma("journal_mode = WAL");
-  const db = drizzle(sqlite, { schema });
+export async function createTestDb(): Promise<Db> {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
 
   // マイグレーション適用
-  migrate(db, {
+  await migrate(db, {
     migrationsFolder: join(import.meta.dirname, "../drizzle"),
   });
 
@@ -27,21 +27,21 @@ export function createTestDb(): Db {
  * 全テーブルのデータをクリアする。
  * beforeEach で呼び出してテスト間の分離を保証する。
  */
-export function resetTestDb(db: Db): void {
+export async function resetTestDb(db: Db): Promise<void> {
   // FK の依存順に削除
-  db.delete(schema.holdingValues).run();
-  db.delete(schema.dailySnapshots).run();
-  db.delete(schema.holdings).run();
-  db.delete(schema.accountStatuses).run();
-  db.delete(schema.transactions).run();
-  db.delete(schema.assetHistoryCategories).run();
-  db.delete(schema.assetHistory).run();
-  db.delete(schema.spendingTargets).run();
-  db.delete(schema.groupAccounts).run();
-  db.delete(schema.accounts).run();
-  db.delete(schema.groups).run();
-  db.delete(schema.assetCategories).run();
-  db.delete(schema.institutionCategories).run();
+  await db.delete(schema.holdingValues);
+  await db.delete(schema.dailySnapshots);
+  await db.delete(schema.holdings);
+  await db.delete(schema.accountStatuses);
+  await db.delete(schema.transactions);
+  await db.delete(schema.assetHistoryCategories);
+  await db.delete(schema.assetHistory);
+  await db.delete(schema.spendingTargets);
+  await db.delete(schema.groupAccounts);
+  await db.delete(schema.accounts);
+  await db.delete(schema.groups);
+  await db.delete(schema.assetCategories);
+  await db.delete(schema.institutionCategories);
 }
 
 /** テスト用グループ ID */
@@ -50,23 +50,21 @@ export const TEST_GROUP_ID = "test_group_001";
 /**
  * テスト用グループを作成する。
  */
-export function createTestGroup(db: Db): string {
+export async function createTestGroup(db: Db): Promise<string> {
   const now = new Date().toISOString();
-  db.insert(schema.groups)
-    .values({
-      id: TEST_GROUP_ID,
-      name: "Test Group",
-      isCurrent: true,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await db.insert(schema.groups).values({
+    id: TEST_GROUP_ID,
+    name: "Test Group",
+    isCurrent: true,
+    createdAt: now,
+    updatedAt: now,
+  });
   return TEST_GROUP_ID;
 }
 
 /**
  * テスト用 DB の接続を閉じる。afterAll で呼び出す。
  */
-export function closeTestDb(db: Db): void {
-  (db as unknown as { $client: Database.Database }).$client.close();
+export async function closeTestDb(db: Db): Promise<void> {
+  await (db as unknown as { $client: PGlite }).$client.close();
 }

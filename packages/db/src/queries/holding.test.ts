@@ -17,104 +17,106 @@ import {
   buildHoldingWhereCondition,
 } from "./holding";
 
-type Db = ReturnType<typeof createTestDb>;
+type Db = Awaited<ReturnType<typeof createTestDb>>;
 let db: Db;
 
-beforeAll(() => {
-  db = createTestDb();
+beforeAll(async () => {
+  db = await createTestDb();
 });
 
-afterAll(() => {
-  closeTestDb(db);
+afterAll(async () => {
+  await closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
-  createTestGroup(db);
+beforeEach(async () => {
+  await resetTestDb(db);
+  await createTestGroup(db);
 });
 
-function createTestAccount(name: string): number {
+async function createTestAccount(name: string): Promise<number> {
   const now = new Date().toISOString();
-  const account = db
-    .insert(schema.accounts)
-    .values({
-      mfId: `mf_${name}`,
-      name,
-      type: "bank",
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  const account = (
+    await db
+      .insert(schema.accounts)
+      .values({
+        mfId: `mf_${name}`,
+        name,
+        type: "bank",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0];
 
-  db.insert(schema.groupAccounts)
-    .values({
-      groupId: TEST_GROUP_ID,
-      accountId: account.id,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await db.insert(schema.groupAccounts).values({
+    groupId: TEST_GROUP_ID,
+    accountId: account.id,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return account.id;
 }
 
-function createSnapshot(): number {
+async function createSnapshot(): Promise<number> {
   const now = new Date().toISOString();
-  const snapshot = db
-    .insert(schema.dailySnapshots)
-    .values({
-      groupId: TEST_GROUP_ID,
-      date: "2025-04-15",
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  const snapshot = (
+    await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: TEST_GROUP_ID,
+        date: "2025-04-15",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0];
   return snapshot.id;
 }
 
-function createAssetCategory(name: string): number {
+async function createAssetCategory(name: string): Promise<number> {
   const now = new Date().toISOString();
-  const category = db
-    .insert(schema.assetCategories)
-    .values({
-      name,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  const category = (
+    await db
+      .insert(schema.assetCategories)
+      .values({
+        name,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0];
   return category.id;
 }
 
-function createHolding(data: {
+async function createHolding(data: {
   accountId: number;
   name: string;
   type?: "asset" | "liability";
   categoryId?: number | null;
   liabilityCategory?: string | null;
   code?: string | null;
-}): number {
+}): Promise<number> {
   const now = new Date().toISOString();
-  const holding = db
-    .insert(schema.holdings)
-    .values({
-      accountId: data.accountId,
-      name: data.name,
-      type: data.type ?? "asset",
-      categoryId: data.categoryId ?? null,
-      liabilityCategory: data.liabilityCategory ?? null,
-      code: data.code ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  const holding = (
+    await db
+      .insert(schema.holdings)
+      .values({
+        accountId: data.accountId,
+        name: data.name,
+        type: data.type ?? "asset",
+        categoryId: data.categoryId ?? null,
+        liabilityCategory: data.liabilityCategory ?? null,
+        code: data.code ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0];
   return holding.id;
 }
 
-function createHoldingValue(data: {
+async function createHoldingValue(data: {
   holdingId: number;
   snapshotId: number;
   amount?: number;
@@ -126,21 +128,19 @@ function createHoldingValue(data: {
   unrealizedGainPct?: number | null;
 }) {
   const now = new Date().toISOString();
-  db.insert(schema.holdingValues)
-    .values({
-      holdingId: data.holdingId,
-      snapshotId: data.snapshotId,
-      amount: data.amount ?? 100000,
-      quantity: data.quantity ?? null,
-      unitPrice: data.unitPrice ?? null,
-      avgCostPrice: data.avgCostPrice ?? null,
-      dailyChange: data.dailyChange ?? null,
-      unrealizedGain: data.unrealizedGain ?? null,
-      unrealizedGainPct: data.unrealizedGainPct ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await db.insert(schema.holdingValues).values({
+    holdingId: data.holdingId,
+    snapshotId: data.snapshotId,
+    amount: data.amount ?? 100000,
+    quantity: data.quantity ?? null,
+    unitPrice: data.unitPrice ?? null,
+    avgCostPrice: data.avgCostPrice ?? null,
+    dailyChange: data.dailyChange ?? null,
+    unrealizedGain: data.unrealizedGain ?? null,
+    unrealizedGainPct: data.unrealizedGainPct ?? null,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 // ============================================================
@@ -176,63 +176,59 @@ describe("buildHoldingWhereCondition", () => {
 // ============================================================
 
 describe("getLatestSnapshot", () => {
-  it("最新のスナップショットを返す", () => {
-    createSnapshot();
+  it("最新のスナップショットを返す", async () => {
+    await createSnapshot();
 
-    const result = getLatestSnapshot(db);
+    const result = await getLatestSnapshot(db);
 
     expect(result).not.toBeNull();
     expect(result!.date).toBe("2025-04-15");
   });
 
-  it("複数のスナップショットがある場合は最新を返す", () => {
+  it("複数のスナップショットがある場合は最新を返す", async () => {
     const now = new Date().toISOString();
-    db.insert(schema.dailySnapshots)
-      .values({
-        groupId: TEST_GROUP_ID,
-        date: "2025-04-14",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-    db.insert(schema.dailySnapshots)
-      .values({
-        groupId: TEST_GROUP_ID,
-        date: "2025-04-15",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.dailySnapshots).values({
+      groupId: TEST_GROUP_ID,
+      date: "2025-04-14",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.dailySnapshots).values({
+      groupId: TEST_GROUP_ID,
+      date: "2025-04-15",
+      createdAt: now,
+      updatedAt: now,
+    });
 
-    const result = getLatestSnapshot(db);
+    const result = await getLatestSnapshot(db);
 
     expect(result!.date).toBe("2025-04-15");
   });
 
-  it("スナップショットがない場合はundefinedを返す", () => {
-    const result = getLatestSnapshot(db);
+  it("スナップショットがない場合はundefinedを返す", async () => {
+    const result = await getLatestSnapshot(db);
     expect(result).toBeUndefined();
   });
 });
 
 describe("getHoldingsWithLatestValues", () => {
-  it("最新スナップショットの保有資産を返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
-    const categoryId = createAssetCategory("株式(現物)");
-    const holdingId = createHolding({
+  it("最新スナップショットの保有資産を返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const categoryId = await createAssetCategory("株式(現物)");
+    const holdingId = await createHolding({
       accountId,
       name: "Stock A",
       categoryId,
     });
-    createHoldingValue({
+    await createHoldingValue({
       holdingId,
       snapshotId,
       amount: 500000,
       dailyChange: 10000,
     });
 
-    const result = getHoldingsWithLatestValues(undefined, db);
+    const result = await getHoldingsWithLatestValues(undefined, db);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Stock A");
@@ -240,36 +236,37 @@ describe("getHoldingsWithLatestValues", () => {
     expect(result[0].categoryName).toBe("株式(現物)");
   });
 
-  it("スナップショットがない場合は空配列を返す", () => {
-    const result = getHoldingsWithLatestValues(undefined, db);
+  it("スナップショットがない場合は空配列を返す", async () => {
+    const result = await getHoldingsWithLatestValues(undefined, db);
     expect(result).toEqual([]);
   });
 
-  it("グループでフィルタリングされる", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
+  it("グループでフィルタリングされる", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
 
     // グループ内のアカウント
-    const holdingId1 = createHolding({ accountId, name: "Holding A" });
-    createHoldingValue({ holdingId: holdingId1, snapshotId, amount: 100000 });
+    const holdingId1 = await createHolding({ accountId, name: "Holding A" });
+    await createHoldingValue({ holdingId: holdingId1, snapshotId, amount: 100000 });
 
     // グループ外のアカウント
     const now = new Date().toISOString();
-    const outsideAccount = db
-      .insert(schema.accounts)
-      .values({
-        mfId: "mf_outside",
-        name: "Outside",
-        type: "bank",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get();
-    const holdingId2 = createHolding({ accountId: outsideAccount.id, name: "Holding B" });
-    createHoldingValue({ holdingId: holdingId2, snapshotId, amount: 200000 });
+    const outsideAccount = (
+      await db
+        .insert(schema.accounts)
+        .values({
+          mfId: "mf_outside",
+          name: "Outside",
+          type: "bank",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+    )[0];
+    const holdingId2 = await createHolding({ accountId: outsideAccount.id, name: "Holding B" });
+    await createHoldingValue({ holdingId: holdingId2, snapshotId, amount: 200000 });
 
-    const result = getHoldingsWithLatestValues(undefined, db);
+    const result = await getHoldingsWithLatestValues(undefined, db);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Holding A");
@@ -277,120 +274,131 @@ describe("getHoldingsWithLatestValues", () => {
 });
 
 describe("getHoldingsByAccountId", () => {
-  it("指定したアカウントの保有資産を返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
-    const holdingId = createHolding({ accountId, name: "Holding A" });
-    createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+  it("指定したアカウントの保有資産を返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const holdingId = await createHolding({ accountId, name: "Holding A" });
+    await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
 
-    const result = getHoldingsByAccountId(accountId, undefined, db);
+    const result = await getHoldingsByAccountId(accountId, undefined, db);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Holding A");
   });
 
-  it("グループ外のアカウントは空配列を返す", () => {
+  it("グループ外のアカウントは空配列を返す", async () => {
     const now = new Date().toISOString();
-    createSnapshot();
-    const outsideAccount = db
-      .insert(schema.accounts)
-      .values({
-        mfId: "mf_outside",
-        name: "Outside",
-        type: "bank",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get();
+    await createSnapshot();
+    const outsideAccount = (
+      await db
+        .insert(schema.accounts)
+        .values({
+          mfId: "mf_outside",
+          name: "Outside",
+          type: "bank",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+    )[0];
 
-    const result = getHoldingsByAccountId(outsideAccount.id, undefined, db);
+    const result = await getHoldingsByAccountId(outsideAccount.id, undefined, db);
 
     expect(result).toEqual([]);
   });
 
-  it("スナップショットがない場合は空配列を返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const result = getHoldingsByAccountId(accountId, undefined, db);
+  it("スナップショットがない場合は空配列を返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const result = await getHoldingsByAccountId(accountId, undefined, db);
     expect(result).toEqual([]);
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getHoldingsByAccountId(1, undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getHoldingsByAccountId(1, undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getHoldingsWithDailyChange", () => {
-  it("日次変動がある保有資産を返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
+  it("日次変動がある保有資産を返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
 
-    const holdingId1 = createHolding({ accountId, name: "Stock A", code: "1234" });
-    createHoldingValue({ holdingId: holdingId1, snapshotId, amount: 100000, dailyChange: 5000 });
+    const holdingId1 = await createHolding({ accountId, name: "Stock A", code: "1234" });
+    await createHoldingValue({
+      holdingId: holdingId1,
+      snapshotId,
+      amount: 100000,
+      dailyChange: 5000,
+    });
 
-    const holdingId2 = createHolding({ accountId, name: "Stock B", code: "5678" });
-    createHoldingValue({ holdingId: holdingId2, snapshotId, amount: 200000, dailyChange: null });
+    const holdingId2 = await createHolding({ accountId, name: "Stock B", code: "5678" });
+    await createHoldingValue({
+      holdingId: holdingId2,
+      snapshotId,
+      amount: 200000,
+      dailyChange: null,
+    });
 
-    const result = getHoldingsWithDailyChange(undefined, db);
+    const result = await getHoldingsWithDailyChange(undefined, db);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Stock A");
     expect(result[0].dailyChange).toBe(5000);
   });
 
-  it("スナップショットがない場合は空配列を返す", () => {
-    const result = getHoldingsWithDailyChange(undefined, db);
+  it("スナップショットがない場合は空配列を返す", async () => {
+    const result = await getHoldingsWithDailyChange(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("hasInvestmentHoldings", () => {
-  it("投資銘柄がある場合はtrueを返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
-    const categoryId = createAssetCategory("株式(現物)");
-    const holdingId = createHolding({ accountId, name: "Stock", categoryId });
-    createHoldingValue({ holdingId, snapshotId });
+  it("投資銘柄がある場合はtrueを返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const categoryId = await createAssetCategory("株式(現物)");
+    const holdingId = await createHolding({ accountId, name: "Stock", categoryId });
+    await createHoldingValue({ holdingId, snapshotId });
 
-    const result = hasInvestmentHoldings(undefined, db);
-
-    expect(result).toBe(true);
-  });
-
-  it("投資信託がある場合もtrueを返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
-    const categoryId = createAssetCategory("投資信託");
-    const holdingId = createHolding({ accountId, name: "Fund", categoryId });
-    createHoldingValue({ holdingId, snapshotId });
-
-    const result = hasInvestmentHoldings(undefined, db);
+    const result = await hasInvestmentHoldings(undefined, db);
 
     expect(result).toBe(true);
   });
 
-  it("投資銘柄がない場合はfalseを返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
-    const categoryId = createAssetCategory("預金");
-    const holdingId = createHolding({ accountId, name: "Deposit", categoryId });
-    createHoldingValue({ holdingId, snapshotId });
+  it("投資信託がある場合もtrueを返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const categoryId = await createAssetCategory("投資信託");
+    const holdingId = await createHolding({ accountId, name: "Fund", categoryId });
+    await createHoldingValue({ holdingId, snapshotId });
 
-    const result = hasInvestmentHoldings(undefined, db);
+    const result = await hasInvestmentHoldings(undefined, db);
+
+    expect(result).toBe(true);
+  });
+
+  it("投資銘柄がない場合はfalseを返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const categoryId = await createAssetCategory("預金");
+    const holdingId = await createHolding({ accountId, name: "Deposit", categoryId });
+    await createHoldingValue({ holdingId, snapshotId });
+
+    const result = await hasInvestmentHoldings(undefined, db);
 
     expect(result).toBe(false);
   });
 
-  it("保有資産がない場合はfalseを返す", () => {
-    createSnapshot();
-    const result = hasInvestmentHoldings(undefined, db);
+  it("保有資産がない場合はfalseを返す", async () => {
+    await createSnapshot();
+    const result = await hasInvestmentHoldings(undefined, db);
     expect(result).toBe(false);
   });
 
-  it("スナップショットがない場合はfalseを返す", () => {
-    const result = hasInvestmentHoldings(undefined, db);
+  it("スナップショットがない場合はfalseを返す", async () => {
+    const result = await hasInvestmentHoldings(undefined, db);
     expect(result).toBe(false);
   });
 });

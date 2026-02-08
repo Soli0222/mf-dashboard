@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
-import { Home, RefreshCw, Github, HelpCircle } from "lucide-react";
+import { Home, Github, HelpCircle } from "lucide-react";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
 
@@ -13,12 +13,6 @@ interface ActionIconsProps {
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
-  const githubOrg = process.env.NEXT_PUBLIC_GITHUB_ORG;
-  const githubRepo = process.env.NEXT_PUBLIC_GITHUB_REPO;
-  const workflowUrl =
-    githubOrg && githubRepo
-      ? `https://github.com/${githubOrg}/${githubRepo}/actions/workflows/daily-update.yml`
-      : null;
 
   if (variant === "sidebar") {
     return (
@@ -31,7 +25,6 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 
   return (
     <div className="flex items-center gap-1">
-      <ReloadButton iconSize={iconSize} workflowUrl={workflowUrl} />
       {notifications}
       <HomeButton iconSize={iconSize} />
       <GitHubButton iconSize={iconSize} className="hidden lg:block" />
@@ -103,19 +96,6 @@ function GitHubButton({ iconSize, className }: { iconSize: string; className?: s
       href="https://github.com/hiroppy/mf-dashboard"
       ariaLabel="GitHub"
       className={className}
-      isExternal
-    />
-  );
-}
-
-function ReloadButton({ iconSize, workflowUrl }: { iconSize: string; workflowUrl: string | null }) {
-  if (!workflowUrl) return null;
-
-  return (
-    <IconButton
-      icon={<RefreshCw className={iconSize} />}
-      href={workflowUrl}
-      ariaLabel="ワークフローを実行"
       isExternal
     />
   );

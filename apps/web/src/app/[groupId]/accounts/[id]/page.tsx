@@ -1,27 +1,13 @@
 import type { Metadata } from "next";
-import { getAllAccountMfIds, getAccountByMfId } from "@moneyforward-daily-action/db";
-import { getAllGroups } from "@moneyforward-daily-action/db";
+import { getAccountByMfId, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { AccountDetailContent } from "../../../accounts/[id]/page";
-
-export async function generateStaticParams() {
-  const groups = getAllGroups().filter((g) => !g.isCurrent);
-  const params: { groupId: string; id: string }[] = [];
-
-  for (const group of groups) {
-    const mfIds = getAllAccountMfIds(group.id);
-    for (const id of mfIds) {
-      params.push({ groupId: group.id, id });
-    }
-  }
-
-  return params;
-}
 
 export async function generateMetadata({
   params,
 }: PageProps<"/[groupId]/accounts/[id]">): Promise<Metadata> {
+  if (!isDatabaseAvailable()) return { title: "アカウント詳細" };
   const { id, groupId } = await params;
-  const account = getAccountByMfId(id, groupId);
+  const account = await getAccountByMfId(id, groupId);
   return {
     title: account?.name ?? "アカウント詳細",
   };

@@ -22,25 +22,25 @@ import {
   calculateCategoryChanges,
 } from "./asset";
 
-type Db = ReturnType<typeof createTestDb>;
+type Db = Awaited<ReturnType<typeof createTestDb>>;
 let db: Db;
 
-beforeAll(() => {
-  db = createTestDb();
+beforeAll(async () => {
+  db = await createTestDb();
 });
 
-afterAll(() => {
-  closeTestDb(db);
+afterAll(async () => {
+  await closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
-  createTestGroup(db);
+beforeEach(async () => {
+  await resetTestDb(db);
+  await createTestGroup(db);
 });
 
-function createAssetHistory(data: { date: string; totalAssets: number }): number {
+async function createAssetHistory(data: { date: string; totalAssets: number }): Promise<number> {
   const now = new Date().toISOString();
-  const history = db
+  const [history] = await db
     .insert(schema.assetHistory)
     .values({
       groupId: TEST_GROUP_ID,
@@ -49,31 +49,28 @@ function createAssetHistory(data: { date: string; totalAssets: number }): number
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
-    .get();
+    .returning();
   return history.id;
 }
 
-function createAssetHistoryCategory(data: {
+async function createAssetHistoryCategory(data: {
   assetHistoryId: number;
   categoryName: string;
   amount: number;
 }) {
   const now = new Date().toISOString();
-  db.insert(schema.assetHistoryCategories)
-    .values({
-      assetHistoryId: data.assetHistoryId,
-      categoryName: data.categoryName,
-      amount: data.amount,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await db.insert(schema.assetHistoryCategories).values({
+    assetHistoryId: data.assetHistoryId,
+    categoryName: data.categoryName,
+    amount: data.amount,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
-function createTestAccount(name: string): number {
+async function createTestAccount(name: string): Promise<number> {
   const now = new Date().toISOString();
-  const account = db
+  const [account] = await db
     .insert(schema.accounts)
     .values({
       mfId: `mf_${name}`,
@@ -82,24 +79,21 @@ function createTestAccount(name: string): number {
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
-    .get();
+    .returning();
 
-  db.insert(schema.groupAccounts)
-    .values({
-      groupId: TEST_GROUP_ID,
-      accountId: account.id,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await db.insert(schema.groupAccounts).values({
+    groupId: TEST_GROUP_ID,
+    accountId: account.id,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return account.id;
 }
 
-function createSnapshot(): number {
+async function createSnapshot(): Promise<number> {
   const now = new Date().toISOString();
-  const snapshot = db
+  const [snapshot] = await db
     .insert(schema.dailySnapshots)
     .values({
       groupId: TEST_GROUP_ID,
@@ -107,19 +101,18 @@ function createSnapshot(): number {
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
-    .get();
+    .returning();
   return snapshot.id;
 }
 
-function createHolding(data: {
+async function createHolding(data: {
   accountId: number;
   name: string;
   type?: "asset" | "liability";
   liabilityCategory?: string | null;
-}): number {
+}): Promise<number> {
   const now = new Date().toISOString();
-  const holding = db
+  const [holding] = await db
     .insert(schema.holdings)
     .values({
       accountId: data.accountId,
@@ -129,22 +122,19 @@ function createHolding(data: {
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
-    .get();
+    .returning();
   return holding.id;
 }
 
-function createHoldingValue(data: { holdingId: number; snapshotId: number; amount: number }) {
+async function createHoldingValue(data: { holdingId: number; snapshotId: number; amount: number }) {
   const now = new Date().toISOString();
-  db.insert(schema.holdingValues)
-    .values({
-      holdingId: data.holdingId,
-      snapshotId: data.snapshotId,
-      amount: data.amount,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  await db.insert(schema.holdingValues).values({
+    holdingId: data.holdingId,
+    snapshotId: data.snapshotId,
+    amount: data.amount,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 // ============================================================
@@ -302,17 +292,25 @@ describe("calculateCategoryChanges", () => {
 // ============================================================
 
 describe("getAssetBreakdownByCategory", () => {
-  it("カテゴリ別資産を金額降順で返す", () => {
-    const historyId = createAssetHistory({ date: "2025-04-15", totalAssets: 1700000 });
-    createAssetHistoryCategory({ assetHistoryId: historyId, categoryName: "預金", amount: 500000 });
-    createAssetHistoryCategory({
+  it("カテゴリ別資産を金額降順で返す", async () => {
+    const historyId = await createAssetHistory({ date: "2025-04-15", totalAssets: 1700000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "預金",
+      amount: 500000,
+    });
+    await createAssetHistoryCategory({
       assetHistoryId: historyId,
       categoryName: "株式",
       amount: 1000000,
     });
-    createAssetHistoryCategory({ assetHistoryId: historyId, categoryName: "債券", amount: 200000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "債券",
+      amount: 200000,
+    });
 
-    const result = getAssetBreakdownByCategory(undefined, db);
+    const result = await getAssetBreakdownByCategory(undefined, db);
 
     expect(result).toEqual([
       { category: "株式", amount: 1000000 },
@@ -321,62 +319,66 @@ describe("getAssetBreakdownByCategory", () => {
     ]);
   });
 
-  it("金額が0以下のカテゴリを除外する", () => {
-    const historyId = createAssetHistory({ date: "2025-04-15", totalAssets: 500000 });
-    createAssetHistoryCategory({ assetHistoryId: historyId, categoryName: "預金", amount: 500000 });
-    createAssetHistoryCategory({
+  it("金額が0以下のカテゴリを除外する", async () => {
+    const historyId = await createAssetHistory({ date: "2025-04-15", totalAssets: 500000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "預金",
+      amount: 500000,
+    });
+    await createAssetHistoryCategory({
       assetHistoryId: historyId,
       categoryName: "空カテゴリ",
       amount: 0,
     });
 
-    const result = getAssetBreakdownByCategory(undefined, db);
+    const result = await getAssetBreakdownByCategory(undefined, db);
 
     expect(result).toEqual([{ category: "預金", amount: 500000 }]);
   });
 
-  it("履歴がない場合は空配列を返す", () => {
-    const result = getAssetBreakdownByCategory(undefined, db);
+  it("履歴がない場合は空配列を返す", async () => {
+    const result = await getAssetBreakdownByCategory(undefined, db);
     expect(result).toEqual([]);
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getAssetBreakdownByCategory(undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getAssetBreakdownByCategory(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getLiabilityBreakdownByCategory", () => {
-  it("負債をカテゴリ別に集計して降順で返す", () => {
-    const accountId = createTestAccount("Bank A");
-    const snapshotId = createSnapshot();
+  it("負債をカテゴリ別に集計して降順で返す", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
 
-    const holdingId1 = createHolding({
+    const holdingId1 = await createHolding({
       accountId,
       name: "Loan A",
       type: "liability",
       liabilityCategory: "住宅ローン",
     });
-    createHoldingValue({ holdingId: holdingId1, snapshotId, amount: 20000000 });
+    await createHoldingValue({ holdingId: holdingId1, snapshotId, amount: 20000000 });
 
-    const holdingId2 = createHolding({
+    const holdingId2 = await createHolding({
       accountId,
       name: "Loan B",
       type: "liability",
       liabilityCategory: "住宅ローン",
     });
-    createHoldingValue({ holdingId: holdingId2, snapshotId, amount: 5000000 });
+    await createHoldingValue({ holdingId: holdingId2, snapshotId, amount: 5000000 });
 
-    const holdingId3 = createHolding({
+    const holdingId3 = await createHolding({
       accountId,
       name: "Card",
       type: "liability",
       liabilityCategory: "カードローン",
     });
-    createHoldingValue({ holdingId: holdingId3, snapshotId, amount: 500000 });
+    await createHoldingValue({ holdingId: holdingId3, snapshotId, amount: 500000 });
 
-    const result = getLiabilityBreakdownByCategory(undefined, db);
+    const result = await getLiabilityBreakdownByCategory(undefined, db);
 
     expect(result).toEqual([
       { category: "住宅ローン", amount: 25000000 },
@@ -384,63 +386,63 @@ describe("getLiabilityBreakdownByCategory", () => {
     ]);
   });
 
-  it("負債がない場合は空配列を返す", () => {
-    createSnapshot();
-    const result = getLiabilityBreakdownByCategory(undefined, db);
+  it("負債がない場合は空配列を返す", async () => {
+    await createSnapshot();
+    const result = await getLiabilityBreakdownByCategory(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getAssetHistory", () => {
-  it("資産履歴を日付降順で返す", () => {
-    createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
-    createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+  it("資産履歴を日付降順で返す", async () => {
+    await createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
 
-    const result = getAssetHistory(undefined, db);
+    const result = await getAssetHistory(undefined, db);
 
     expect(result).toHaveLength(2);
     expect(result[0].date).toBe("2025-04-15");
     expect(result[1].date).toBe("2025-04-14");
   });
 
-  it("limitを指定した場合は件数が制限される", () => {
-    createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
-    createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+  it("limitを指定した場合は件数が制限される", async () => {
+    await createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
 
-    const result = getAssetHistory({ limit: 1 }, db);
+    const result = await getAssetHistory({ limit: 1 }, db);
 
     expect(result).toHaveLength(1);
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getAssetHistory(undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getAssetHistory(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getAssetHistoryWithCategories", () => {
-  it("履歴にカテゴリ情報を付与して返す", () => {
-    const historyId1 = createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
-    createAssetHistoryCategory({
+  it("履歴にカテゴリ情報を付与して返す", async () => {
+    const historyId1 = await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+    await createAssetHistoryCategory({
       assetHistoryId: historyId1,
       categoryName: "預金",
       amount: 150000,
     });
-    createAssetHistoryCategory({
+    await createAssetHistoryCategory({
       assetHistoryId: historyId1,
       categoryName: "株式",
       amount: 50000,
     });
 
-    const historyId2 = createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
-    createAssetHistoryCategory({
+    const historyId2 = await createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
+    await createAssetHistoryCategory({
       assetHistoryId: historyId2,
       categoryName: "預金",
       amount: 100000,
     });
 
-    const result = getAssetHistoryWithCategories(undefined, db);
+    const result = await getAssetHistoryWithCategories(undefined, db);
 
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({
@@ -455,46 +457,46 @@ describe("getAssetHistoryWithCategories", () => {
     });
   });
 
-  it("履歴が空の場合は空配列を返す", () => {
-    const result = getAssetHistoryWithCategories(undefined, db);
+  it("履歴が空の場合は空配列を返す", async () => {
+    const result = await getAssetHistoryWithCategories(undefined, db);
     expect(result).toEqual([]);
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getAssetHistoryWithCategories(undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getAssetHistoryWithCategories(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getLatestTotalAssets", () => {
-  it("最新の総資産を返す", () => {
-    createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
-    createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+  it("最新の総資産を返す", async () => {
+    await createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
 
-    const result = getLatestTotalAssets(undefined, db);
+    const result = await getLatestTotalAssets(undefined, db);
 
     expect(result).toBe(200000);
   });
 
-  it("データがない場合はnullを返す", () => {
-    const result = getLatestTotalAssets(undefined, db);
+  it("データがない場合はnullを返す", async () => {
+    const result = await getLatestTotalAssets(undefined, db);
     expect(result).toBeNull();
   });
 
-  it("グループがない場合はnullを返す", () => {
-    resetTestDb(db);
-    const result = getLatestTotalAssets(undefined, db);
+  it("グループがない場合はnullを返す", async () => {
+    await resetTestDb(db);
+    const result = await getLatestTotalAssets(undefined, db);
     expect(result).toBeNull();
   });
 });
 
 describe("getDailyAssetChange", () => {
-  it("前日比の変動を返す", () => {
-    createAssetHistory({ date: "2025-04-14", totalAssets: 1000000 });
-    createAssetHistory({ date: "2025-04-15", totalAssets: 1200000 });
+  it("前日比の変動を返す", async () => {
+    await createAssetHistory({ date: "2025-04-14", totalAssets: 1000000 });
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 1200000 });
 
-    const result = getDailyAssetChange(undefined, db);
+    const result = await getDailyAssetChange(undefined, db);
 
     expect(result).toEqual({
       today: 1200000,
@@ -503,19 +505,19 @@ describe("getDailyAssetChange", () => {
     });
   });
 
-  it("データが2件未満の場合はnullを返す", () => {
-    createAssetHistory({ date: "2025-04-15", totalAssets: 100000 });
+  it("データが2件未満の場合はnullを返す", async () => {
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 100000 });
 
-    const result = getDailyAssetChange(undefined, db);
+    const result = await getDailyAssetChange(undefined, db);
 
     expect(result).toBeNull();
   });
 
-  it("資産減少の場合は負の変動を返す", () => {
-    createAssetHistory({ date: "2025-04-14", totalAssets: 1000000 });
-    createAssetHistory({ date: "2025-04-15", totalAssets: 900000 });
+  it("資産減少の場合は負の変動を返す", async () => {
+    await createAssetHistory({ date: "2025-04-14", totalAssets: 1000000 });
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 900000 });
 
-    const result = getDailyAssetChange(undefined, db);
+    const result = await getDailyAssetChange(undefined, db);
 
     expect(result).toEqual({
       today: 900000,
@@ -524,40 +526,40 @@ describe("getDailyAssetChange", () => {
     });
   });
 
-  it("グループがない場合はnullを返す", () => {
-    resetTestDb(db);
-    const result = getDailyAssetChange(undefined, db);
+  it("グループがない場合はnullを返す", async () => {
+    await resetTestDb(db);
+    const result = await getDailyAssetChange(undefined, db);
     expect(result).toBeNull();
   });
 });
 
 describe("getCategoryChangesForPeriod", () => {
-  it("カテゴリ別の変動を計算して返す", () => {
-    const historyId1 = createAssetHistory({ date: "2025-04-15", totalAssets: 250000 });
-    createAssetHistoryCategory({
+  it("カテゴリ別の変動を計算して返す", async () => {
+    const historyId1 = await createAssetHistory({ date: "2025-04-15", totalAssets: 250000 });
+    await createAssetHistoryCategory({
       assetHistoryId: historyId1,
       categoryName: "預金",
       amount: 150000,
     });
-    createAssetHistoryCategory({
+    await createAssetHistoryCategory({
       assetHistoryId: historyId1,
       categoryName: "株式",
       amount: 100000,
     });
 
-    const historyId2 = createAssetHistory({ date: "2025-04-14", totalAssets: 200000 });
-    createAssetHistoryCategory({
+    const historyId2 = await createAssetHistory({ date: "2025-04-14", totalAssets: 200000 });
+    await createAssetHistoryCategory({
       assetHistoryId: historyId2,
       categoryName: "預金",
       amount: 130000,
     });
-    createAssetHistoryCategory({
+    await createAssetHistoryCategory({
       assetHistoryId: historyId2,
       categoryName: "株式",
       amount: 70000,
     });
 
-    const result = getCategoryChangesForPeriod("daily", undefined, db);
+    const result = await getCategoryChangesForPeriod("daily", undefined, db);
 
     expect(result).not.toBeNull();
     expect(result!.total).toEqual({
@@ -573,31 +575,31 @@ describe("getCategoryChangesForPeriod", () => {
     });
   });
 
-  it("最新データがない場合はnullを返す", () => {
-    const result = getCategoryChangesForPeriod("daily", undefined, db);
+  it("最新データがない場合はnullを返す", async () => {
+    const result = await getCategoryChangesForPeriod("daily", undefined, db);
     expect(result).toBeNull();
   });
 
-  it("前期間データがない場合はnullを返す", () => {
-    createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+  it("前期間データがない場合はnullを返す", async () => {
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
 
-    const result = getCategoryChangesForPeriod("daily", undefined, db);
+    const result = await getCategoryChangesForPeriod("daily", undefined, db);
 
     expect(result).toBeNull();
   });
 
-  it("最新と前期間が同じ日付の場合はnullを返す", () => {
-    createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+  it("最新と前期間が同じ日付の場合はnullを返す", async () => {
+    await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
 
     // 同じ日付しかないので比較対象がない
-    const result = getCategoryChangesForPeriod("daily", undefined, db);
+    const result = await getCategoryChangesForPeriod("daily", undefined, db);
 
     expect(result).toBeNull();
   });
 
-  it("グループがない場合はnullを返す", () => {
-    resetTestDb(db);
-    const result = getCategoryChangesForPeriod("daily", undefined, db);
+  it("グループがない場合はnullを返す", async () => {
+    await resetTestDb(db);
+    const result = await getCategoryChangesForPeriod("daily", undefined, db);
     expect(result).toBeNull();
   });
 });

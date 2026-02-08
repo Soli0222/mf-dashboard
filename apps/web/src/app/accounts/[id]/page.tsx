@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getAccountByMfId, getAllAccountMfIds } from "@moneyforward-daily-action/db";
+import { getAccountByMfId, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { notFound } from "next/navigation";
 import { AccountSummaryCard } from "../../../components/info/account-summary-card";
@@ -11,21 +11,19 @@ import { AccountStatusBadge } from "../../../components/ui/account-status-badge"
 import { Badge } from "../../../components/ui/badge";
 import { formatLastUpdated } from "../../../lib/format";
 
-export async function generateStaticParams() {
-  const mfIds = getAllAccountMfIds();
-  return mfIds.map((id) => ({ id }));
-}
-
 export async function generateMetadata({ params }: PageProps<"/accounts/[id]">): Promise<Metadata> {
+  if (!isDatabaseAvailable()) return { title: "アカウント詳細" };
   const { id } = await params;
-  const account = getAccountByMfId(id);
+  const account = await getAccountByMfId(id);
   return {
     title: account?.name ?? "アカウント詳細",
   };
 }
 
-export function AccountDetailContent({ id, groupId }: { id: string; groupId?: string }) {
-  const account = getAccountByMfId(id, groupId);
+export async function AccountDetailContent({ id, groupId }: { id: string; groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
+  const account = await getAccountByMfId(id, groupId);
   if (!account) {
     notFound();
   }

@@ -1,4 +1,4 @@
-import { initDb, closeDb } from "@moneyforward-daily-action/db";
+import { initDb, closeDb, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import {
   updateAccountCategory,
   buildAccountIdMap,
@@ -7,11 +7,11 @@ import {
   saveScrapedData,
   saveGroupOnlyData,
 } from "@moneyforward-daily-action/db/repository/save-scraped-data";
+import { hasExistingData } from "@moneyforward-daily-action/db/repository/snapshots";
 import {
   hasTransactionsForMonth,
   saveTransactionsForMonth,
 } from "@moneyforward-daily-action/db/repository/transactions";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
@@ -20,6 +20,7 @@ import { createBrowserContext } from "./browser/context.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { runHooks } from "./hooks/runner.js";
 import { log, debug, info, error, section, warn } from "./logger.js";
+import { triggerRevalidation } from "./revalidate.js";
 import { scrapeAllGroups } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { isNoGroup, switchGroup, NO_GROUP_ID, createGroupScope } from "./scrapers/group.js";
@@ -38,22 +39,24 @@ const isHeaded = process.env.HEADED === "true";
 async function main() {
   const skipRefresh = process.env.SKIP_REFRESH === "true";
   const authState = hasAuthState() ? "configured" : "none";
-  const dbPath =
-    process.env.DB_PATH || path.join(import.meta.dirname, "../../../data/moneyforward.db");
-  const dbExists = existsSync(dbPath);
-  const scrapeMode = process.env.SCRAPE_MODE || (dbExists ? "month" : "history");
+  const dbAvailable = isDatabaseAvailable();
+
+  section("Setup");
+  log("Initializing database");
+  const db = await initDb();
+
+  // DBにデータが存在するかチェックしてスクレイピングモードを自動判定
+  // 初回実行（DB空）の場合は history モードで過去データを取得
+  const dbHasData = dbAvailable ? await hasExistingData(db) : false;
+  const scrapeMode = process.env.SCRAPE_MODE || (dbHasData ? "month" : "history");
   const isHistoryMode = scrapeMode === "history";
 
   section("Options");
   log(`SKIP_REFRESH:   ${skipRefresh}`);
-  log(`SCRAPE_MODE:    ${scrapeMode} (DB exists: ${dbExists})`);
+  log(`SCRAPE_MODE:    ${scrapeMode} (DB has data: ${dbHasData})`);
   log(`DEBUG:          ${isDebug}`);
   log(`HEADED:         ${isHeaded}`);
   log(`AUTH_STATE:     ${authState}`);
-
-  section("Setup");
-  log("Initializing database");
-  const db = initDb();
 
   const browser = await chromium.launch({
     headless: !isHeaded,
@@ -97,7 +100,7 @@ async function main() {
       section(`Save: ${noGroupData.group.name} (Full)`);
       const scrapedData = buildScrapedData(globalData, noGroupData);
       debug("Scraped data:", JSON.stringify(scrapedData, null, 2));
-      saveScrapedData(db, scrapedData);
+      await saveScrapedData(db, scrapedData);
     }
 
     // 各グループはグループ固有データのみ保存（リンク + assetHistory + spendingTargets）
@@ -106,7 +109,7 @@ async function main() {
 
       section(`Save: ${groupData.group.name} (Group Only)`);
       const scrapedData = buildGroupOnlyScrapedData(groupData);
-      saveGroupOnlyData(db, scrapedData);
+      await saveGroupOnlyData(db, scrapedData);
     }
 
     // 金融機関カテゴリはデフォルトグループ（または最初のグループ）で一度だけ取得
@@ -114,14 +117,14 @@ async function main() {
     const categoryMap = await scrapeInstitutionCategories(page);
     log(`Updated ${categoryMap.size} account categories`);
     for (const [mfId, category] of categoryMap.entries()) {
-      updateAccountCategory(db, mfId, category);
+      await updateAccountCategory(db, mfId, category);
     }
 
     if (isHistoryMode) {
       section("Cash Flow History");
 
       // accountIdMapを構築（トランザクション保存時のaccount_id設定用）
-      const accountIdMap = buildAccountIdMap(db);
+      const accountIdMap = await buildAccountIdMap(db);
 
       // 先にDBをチェックしてスキップ可能な月数を計算
       // 今月 + 去年の全月分を取得対象とする
@@ -136,7 +139,7 @@ async function main() {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
         const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-        if (!hasTransactionsForMonth(db, month)) {
+        if (!(await hasTransactionsForMonth(db, month))) {
           monthsToFetch = i + 1;
         }
       }
@@ -151,7 +154,7 @@ async function main() {
       const historyResults = await scrapeCashFlowHistory(page, monthsToFetch);
 
       for (const { month, data: monthData } of historyResults) {
-        const savedCount = saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
+        const savedCount = await saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
         log(`  ${month}: saved ${savedCount} transactions`);
       }
     }
@@ -192,6 +195,9 @@ async function main() {
       error("Failed to send Slack notification:", err);
     }
 
+    // Trigger on-demand ISR revalidation
+    await triggerRevalidation();
+
     info("Completed!");
   } catch (err) {
     error("Error occurred:", err);
@@ -215,7 +221,7 @@ async function main() {
     process.exit(1);
   } finally {
     await browser.close();
-    closeDb();
+    await closeDb();
   }
 }
 

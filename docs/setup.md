@@ -2,118 +2,156 @@
 
 ## 必須要件
 
-- [MoneyForward Me](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)
-- [Cloudflare](https://www.cloudflare.com/ja-jp/)
-  - GitHub Pagesが使えるならなくてもいいが、workflowを変更する必要あり
+- [MoneyForward Me](https://moneyforward.com/) アカウント（ワンタイムパスワード設定済み）
+- Docker / Docker Compose
+- Kubernetes クラスター + Helm 3（本番デプロイ時）
+- Node.js 22+ / pnpm 10+（開発時）
 
-## 1. プライベートリポジトリの作成
+---
 
-**SQLiteをプッシュするため、プライベートリポジトリで行ってください。** GitHubの仕様上、このリポジトリをforkした場合は強制的にパブリックになるため、UIから行わずに以下を手元で実行し作成してください。
-
-```sh
-$ git clone --bare https://github.com/hiroppy/mf-dashboard
-$ cd mf-dashboard
-# 作成したプライベートリポジトリへ変更
-$ git push --mirror https://github.com/xxxx/private-repo.git
-$ git remote add upstream https://github.com/hiroppy/mf-dashboard
-```
-
-## 2. 各種アカウント設定
-
-- MoneyForwardでワンタイムパスワードの設定を行う ([参考](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95))
-- 1Passwordでservice accountを発行する ([参考](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account))
-  - Private, Familyなど最初から作成されているvaultにMoneyForwardのアカウントを保存している場合、service accountはそのvaultへアクセスできないので注意。その場合は、手で作ったvaultへ移動させる必要がある
-- Cloudflareにプロジェクトを作り、そのリポジトリとGitHub連携を行う ([参考](https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/))
-  - ビルド構成
-    - ビルド コマンド: `pnpm run build`
-    - デプロイ コマンド: `npx wrangler deploy`
-    - バージョン コマンド: `npx wrangler versions upload`
-    - ルート ディレクトリ: `/`
-- (Optional) Slack Botを作成する (更新結果をSlackに通知したい場合)
-  - [ここ](https://api.slack.com/apps)から作成し、`xoxb-`から始まるtokenを作成
-    - Install App > OAuth Tokens
-  - `chat:write` の権限を与えておく
-    - OAuth & Permissions > Scopes
-  - 投稿したいチャンネルに招待する
-
-## 3. Cloudflare Oneを設定
-
-Cloudflareへデプロイするにあたり、[Cloudflare One](https://developers.cloudflare.com/cloudflare-one/)でアクセスコントロールを設定する必要がある。
-
-Workers&Pagesで先程作ったプロジェクトの「設定」タブの「ドメインとルート」項目にあるworkers.devタイプのURL行の3点メニューを開き、Cloudflare Accessを有効にする。そうするとアプリケーションが作られているので、ポリシーとログイン方法を設定する必要がある。ここのポリシーで許可したいEmailを追加する。
-
-注意: プロジェクトのプレビュー URL がactive(default)の場合、外から見えてしまうため無効にするのを忘れないこと。
-
-標準でワンタイムパスワード込みのログインは行えるが、Google認証を使いたい場合は次のセクションへ移動。
-
-### Google認証を利用したい場合
-
-- [Google Cloud](https://console.cloud.google.com/)でプロジェクトを作り、OAuth client IDを発行
-  - APIs & Services > Credentials > Create Credentials
-  - `https://console.cloud.google.com/apis/credentials`
-- 以下を設定
-  - アプリケーションタイプ
-    - `Web application`
-  - 承認済みの JavaScript 生成元
-    - https://<your-team-name>.cloudflareaccess.com
-    - `<your-team-name>`はCloudflare Oneのチーム名
-  - 承認済みのリダイレクト URI
-    - `https://<your-team-name>.cloudflareaccess.com/cdn-cgi/access/callback`
-- `Client ID` と `Client Secret`を覚えておく
-
-Cloudflare OneにIdentity Providerの登録(`/integrations/identity-providers`)があるので、そこへ行き、Google認証を登録する。最後にさっき作ったアプリケーションの設定に行き、ログイン方法の選択でGoogleが選べるようになるので選べば完了。
-
-## 3. 環境変数設定
-
-作成したリポジトリの `/settings/secrets/actions` ページへ行き、以下の環境変数をそれぞれ設定。変数とシークレットそれぞれあるので間違えないように。
-
-### Variables
-
-| Key              | Required | Value | Why                                            |
-| ---------------- | -------- | ----- | ---------------------------------------------- |
-| RUN_TASK         | ✅       | true  | crontabの実行に必要                            |
-| CACHE_AUTH_STATE |          | true  | 認証状態をキャッシュし毎回のログインをスキップ |
-
-### Secrets
-
-| Key                      | Required | Value                                            | Why                                                 |
-| ------------------------ | -------- | ------------------------------------------------ | --------------------------------------------------- |
-| OP_SERVICE_ACCOUNT_TOKEN | ✅       | 1passwordのサービスアカウントトークン            | ログインに必要                                      |
-| OP_VAULT                 | ✅       | 保管庫ID                                         | ログインに必要                                      |
-| OP_ITEM                  | ✅       | MoneyForwardのアイテムID                         | ログインに必要                                      |
-| OP_TOTP_FIELD            | ✅       | MoneyForwardのワンタイムパスワードのフィールドID | ログインに必要                                      |
-| DASHBOARD_URL            |          | デプロイ先URL                                    | Slack投稿でダッシュボードリンクを生成               |
-| SLACK_BOT_TOKEN          |          | bot token                                        | Slackへ結果投稿のため                               |
-| SLACK_CHANNEL_ID         |          | 投稿先のチャンネルID                             | Slackへ結果投稿のため                               |
-| NEXT_PUBLIC_GITHUB_ORG   |          | このリポジトリの組織名                           | UIからGitHub workflowへアクセスするためのリンク作成 |
-| NEXT_PUBLIC_GITHUB_REPO  |          | このリポジトリのリポジトリ名                     | UIからGitHub workflowへアクセスするためのリンク作成 |
-
-`NEXT_PUBLIC_GITHUB_ORG`, `NEXT_PUBLIC_GITHUB_REPO`に関しては、Next.jsのビルド時に必要な環境変数なので、Cloudflare側で設定する必要がある。
-
-### 1PasswordのIDの見つけ方 (アプリ)
-
-1password/sdkは日本語に対応しておらずエラーとなってしまうため日本語のものは全部UUIDを利用する必要がある。
-
-- `OP_VAULT`
-  - サイドバーでその保管庫を右クリックすると、UUIDをコピーが出てくる
-- `OP_ITEM`
-  - MoneyForwardのアイテム画面右上にあるケバブメニュー(`︙`)をクリックすると、UUIDをコピーが出てくる
-- `OP_TOTP_FIELD`
-  - `OP_ITEM`同様、メニューを開きアイテムのJSONをコピーを押し、そのJSONの中からUUIDを探す。`u`に`TOTP_`開始の文字列があったらそれが正解
-
-## 4. 実行
-
-作ったリポジトリの`/actions/workflows/daily-update.yml`へ行くとRun Workflowがあるので、手動実行し、SQLiteがコミットされたら成功。
-
-## バージョン更新
+## 1. リポジトリのクローン
 
 ```sh
-$ sh update.sh
+git clone https://github.com/<your-org>/mf-dashboard.git
+cd mf-dashboard
+pnpm install
 ```
 
+---
+
+## 2. MoneyForward Me の TOTP 設定
+
+MoneyForward Me でワンタイムパスワードの設定を行います（[参考](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95)）。
+
+設定時に表示される **TOTP シークレットキー**（`otpauth://` URI 内の `secret=` パラメータ）を控えておきます。これが `MF_TOTP_SECRET` 環境変数の値になります。
+
+---
+
+## 3. 環境変数の準備
+
+### ローカル開発（Docker Compose）
+
+`.config/` ディレクトリに以下の 2 ファイルを作成します。
+
 ```sh
-$ git pull origin main
-$ git pull upstream --no-ff
-$ git push -f origin main
+mkdir -p .config
 ```
+
+**`.config/postgres.env`:**
+
+```env
+POSTGRES_USER=mf
+POSTGRES_PASSWORD=<your-password>
+POSTGRES_DB=mf_dashboard
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+```
+
+**`.config/apps.env`:**
+
+```env
+MF_USERNAME=<MoneyForward ログインメールアドレス>
+MF_PASSWORD=<MoneyForward ログインパスワード>
+MF_TOTP_SECRET=<TOTP シークレットキー>
+
+# On-demand ISR（オプション）
+REVALIDATION_URL=http://web:3000/api/revalidate
+REVALIDATION_TOKEN=<任意のトークン文字列>
+
+# Slack 通知（オプション）
+SLACK_BOT_TOKEN=xoxb-xxxx
+SLACK_CHANNEL_ID=C0XXXXXXX
+DASHBOARD_URL=https://your-dashboard-url.example.com
+```
+
+---
+
+## 4. ローカル開発
+
+### Docker Compose で起動
+
+```sh
+# PostgreSQL + Web + Crawler をすべて起動
+docker compose up -d
+
+# Web のみ起動（DB + Web）
+docker compose up -d db web
+
+# クローラーを単発実行
+docker compose up crawler
+```
+
+Web は http://localhost:3050 でアクセスできます。
+
+### ネイティブ開発サーバー（ホットリロード）
+
+```sh
+# PostgreSQL だけ Docker で起動
+docker compose up -d db
+
+# .config/postgres.env のホストを localhost に変更して .env に設定
+echo "POSTGRES_HOST=localhost" >> .env
+
+# 開発サーバー起動
+pnpm dev
+```
+
+---
+
+## 5. Kubernetes デプロイ
+
+### 前提
+
+- Kubernetes クラスター
+- Helm 3
+- コンテナレジストリ（イメージをビルド & プッシュ済み）
+
+### Secret の作成
+
+```sh
+kubectl create secret generic mf-dashboard-credentials \
+  --from-literal=MF_USERNAME='<email>' \
+  --from-literal=MF_PASSWORD='<password>' \
+  --from-literal=MF_TOTP_SECRET='<totp-secret>' \
+  --from-literal=REVALIDATION_TOKEN='<token>' \
+  --from-literal=SLACK_BOT_TOKEN='<token>' \
+  --from-literal=SLACK_CHANNEL_ID='<channel-id>'
+```
+
+### Helm Chart のインストール
+
+```sh
+helm install mf-dashboard charts/mf-dashboard \
+  --set database.host=<postgres-host> \
+  --set database.user=<user> \
+  --set database.password=<password> \
+  --set database.name=<db-name> \
+  --set credentials.existingSecret=mf-dashboard-credentials
+```
+
+### values.yaml の主要設定
+
+| キー                         | 説明                              | デフォルト      |
+| ---------------------------- | --------------------------------- | --------------- |
+| `crawler.image.repository`   | Crawler イメージ                  |                 |
+| `web.image.repository`       | Web イメージ                      |                 |
+| `cronjob.schedules`          | CronJob スケジュール（UTC）       | JST 6:50, 15:20 |
+| `database.host`              | PostgreSQL ホスト                 |                 |
+| `database.port`              | PostgreSQL ポート                 | `5432`          |
+| `credentials.existingSecret` | 認証情報の既存 Secret 名          |                 |
+| `slack.enabled`              | Slack 通知を有効化                | `false`         |
+| `ingress.enabled`            | Ingress を有効化                  | `true`          |
+| `crawler.initOnInstall`      | helm install 時に初回クロール実行 | `false`         |
+
+---
+
+## 6. Slack 通知（オプション）
+
+更新結果を Slack に通知したい場合:
+
+1. [Slack API](https://api.slack.com/apps) から Bot を作成
+2. `chat:write` 権限を付与（OAuth & Permissions > Scopes）
+3. Install App からトークン（`xoxb-` 開始）を取得
+4. 投稿先チャンネルに Bot を招待
+
+環境変数に `SLACK_BOT_TOKEN` と `SLACK_CHANNEL_ID` を設定します。

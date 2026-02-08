@@ -1,13 +1,14 @@
 import type { Browser, BrowserContext, Page } from "playwright";
-import { initDb } from "@moneyforward-daily-action/db";
+import { initDb, getDb } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
-import { existsSync, unlinkSync } from "node:fs";
+import { sql } from "drizzle-orm";
 import path from "node:path";
 import { chromium } from "playwright";
 import { createBrowserContext } from "../../src/browser/context.js";
 import { SCREENSHOT_DIR, ensureScreenshotDir } from "./global-setup.js";
 
 const NAVIGATION_TIMEOUT = 30000;
+const TEST_DATABASE_URL = "postgresql://mf:mf@localhost:5432/mf_dashboard_test";
 
 export async function launchLoggedInContext(): Promise<{
   browser: Browser;
@@ -58,15 +59,26 @@ export async function withNewPage<T>(
   }
 }
 
-export function setupTestDb(dbPath: string): void {
-  cleanupTestDb(dbPath);
-  process.env.DB_PATH = dbPath;
-  initDb();
+export async function setupTestDb(): Promise<void> {
+  process.env.DATABASE_URL = TEST_DATABASE_URL;
+  await initDb();
+  await cleanupTestDb();
 }
 
-export function cleanupTestDb(dbPath: string): void {
-  for (const suffix of ["", "-shm", "-wal"]) {
-    const f = dbPath + suffix;
-    if (existsSync(f)) unlinkSync(f);
-  }
+export async function cleanupTestDb(): Promise<void> {
+  const db = getDb();
+  // Truncate all tables in reverse dependency order
+  await db.execute(sql`TRUNCATE TABLE
+    holding_values,
+    holdings,
+    daily_snapshots,
+    account_statuses,
+    transactions,
+    spending_targets,
+    asset_history,
+    group_accounts,
+    accounts,
+    asset_categories,
+    groups
+    CASCADE`);
 }

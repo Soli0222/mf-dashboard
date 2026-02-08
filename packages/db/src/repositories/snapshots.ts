@@ -3,14 +3,26 @@ import type { RefreshResult } from "../types";
 import { schema } from "../index";
 import { now } from "../utils";
 
+/**
+ * データベースにスナップショットが存在するかチェック。
+ * DBが空（初回実行）の場合は false を返す。
+ */
+export async function hasExistingData(db: Db): Promise<boolean> {
+  const result = await db
+    .select({ id: schema.dailySnapshots.id })
+    .from(schema.dailySnapshots)
+    .limit(1);
+  return result.length > 0;
+}
+
 // 実行ごとに新しいスナップショットを作成（同じ日でも複数作成可能）
-export function createSnapshot(
+export async function createSnapshot(
   db: Db,
   groupId: string,
   date: string,
   refreshResult?: RefreshResult | null,
-): number {
-  const result = db
+): Promise<number> {
+  const result = await db
     .insert(schema.dailySnapshots)
     .values({
       groupId,
@@ -19,10 +31,7 @@ export function createSnapshot(
       createdAt: now(),
       updatedAt: now(),
     })
-    .returning({ id: schema.dailySnapshots.id })
-    .get();
+    .returning({ id: schema.dailySnapshots.id });
 
-  const snapshotId = result.id;
-
-  return snapshotId;
+  return result[0].id;
 }

@@ -19,55 +19,55 @@ export const Expense: Story = {
     type: "expense",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockImplementation((month: string) => {
+    mocked(getMonthlyCategoryTotals).mockImplementation(async (month: string) => {
       // 先月データなし（空配列を返す）
       if (month !== "2025-04") return [];
       return [
         {
           month: "2025-04",
           category: "食費",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 80000,
         },
         {
           month: "2025-04",
           category: "住宅",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 120000,
         },
         {
           month: "2025-04",
           category: "水道・光熱費",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 20000,
         },
         {
           month: "2025-04",
           category: "通信費",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 15000,
         },
         {
           month: "2025-04",
           category: "交通費",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 10000,
         },
         {
           month: "2025-04",
           category: "日用品",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 8000,
         },
         {
           month: "2025-04",
           category: "趣味・娯楽",
-          type: "expense",
+          type: "expense" as const,
           totalAmount: 25000,
         },
       ];
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -228,19 +228,19 @@ export const Income: Story = {
     type: "income",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockImplementation((month: string) => {
+    mocked(getMonthlyCategoryTotals).mockImplementation(async (month: string) => {
       // 先月データなし（空配列を返す）
       if (month !== "2025-04") return [];
       return [
         {
           month: "2025-04",
           category: "収入",
-          type: "income",
+          type: "income" as const,
           totalAmount: 420000,
         },
       ];
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -296,7 +296,7 @@ export const WithDelta: Story = {
     type: "expense",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockImplementation((month: string) => {
+    mocked(getMonthlyCategoryTotals).mockImplementation(async (month: string) => {
       if (month === "2025-05") {
         return [
           {
@@ -353,7 +353,7 @@ export const WithDelta: Story = {
         },
       ];
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -379,7 +379,7 @@ export const Empty: Story = {
     type: "expense",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockReturnValue([]);
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getMonthlyCategoryTotals).mockResolvedValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };

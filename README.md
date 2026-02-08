@@ -4,11 +4,15 @@
   <p>MoneyForward Meを自動化、可視化</p>
 </div>
 
+> [!NOTE]
+> This is a fork of [hiroppy/mf-dashboard](https://github.com/hiroppy/mf-dashboard).
+> オリジナルは GitHub Actions + 1Password + SQLite + Cloudflare Pages 構成ですが、本フォークでは Kubernetes + PostgreSQL + On-demand ISR 構成に移行しています。
+
 ## 機能
 
 ### 指定した時間に金融機関の一括更新
 
-GitHubのworkflowでcrontabを使い定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日6:50(JST)と15:20(JST)。GitHubのcrontabは指定時間ちょうどに実行されないので、-10分に設定。
+Kubernetes CronJob で定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日 6:50(JST) と 15:20(JST)。
 
 ### Slackへ結果を投稿
 
@@ -32,61 +36,42 @@ hookが提供されているので、スクレイピング時に用意したス�
 
 ## アーキテクチャ
 
-このプロダクトは、GitHub Actionsで定期的にMoneyForward Meのデータを取得してSQLiteに保存し、Cloudflare Pagesで静的サイトをビルド・公開する。Publicで公開する前提のものではないので、以下の構成とする。
+Kubernetes 上で CronJob により定期的に MoneyForward Me のデータを取得し、PostgreSQL に保存。Next.js (standalone + ISR) でダッシュボードを配信する。
 
 ```mermaid
 graph LR
-    A[GitHub Actions<br/>Cron] -->|1. 実行| B[Crawler<br/>Playwright]
-    B -->|2. OTP取得| E[1Password<br/>Service Account]
-    E -->|3. 認証情報| B
+    A[Kubernetes<br/>CronJob] -->|1. 実行| B[Crawler<br/>Playwright]
+    B -->|2. OTP生成| E[otpauth<br/>MF_TOTP_SECRET]
+    E -->|3. 認証| B
     B -->|4. アクセス| F[MoneyForward Me]
     F -->|5. データ| B
-    B -->|6. 保存| C[SQLite<br/>Database]
-    C -->|7. 更新完了| A
-    A -->|8. Git Commit| D[Cloudflare Worker<br/>Next.js Static Export]
+    B -->|6. 保存| C[(PostgreSQL)]
+    B -->|7. Revalidate| D[Next.js<br/>standalone + ISR]
+    C -->|8. クエリ| D
+    D -->|9. 配信| G[Ingress<br/>Traefik]
 ```
 
 **処理の流れ:**
 
-- **定期実行**: GitHub Actionsのcronスケジュールで自動実行
-- **認証**: 1Password Service AccountからOTPを取得
-- **データ取得**: Playwrightを使用してMoneyForward Meからデータをスクレイピング
-- **データ保存**: SQLiteデータベースに構造化して保存
-- **コミット**: SQLiteファイルをリポジトリにコミットすることにより、cloudflareをキック
-- **ビルド・デプロイ**: Cloudflare PagesでNext.jsの静的サイトをビルドして公開(Cloudflare Oneの利用を強く推奨)
-
-## 推奨セキュリティ
-
-- GitHub
-  - Passkey
-- MoneyForward Me
-  - ワンタイムパスワード
-  - Passkeyだけだとクローリングするときにログインできない点に注意
-- Cloudflare
-  - Cloudflare oneでサイトへのアクセス制限 (e.g. googleログイン)
-
-このプロダクトはスケールさせる必要がないことから、当初GitHubだけで完結するように設計されていた。しかし、Private repoの場合はGitHub Pagesが有料限定ということでページの公開と認証はCloudflareを利用するようにした経緯がある。
-
-SQLiteを今後、pushしなくても良いオプションを作る可能性はあるが、毎回1年分のデータ取得と取得毎のdiffが取れなくなるデメリットがあるため現段階では実装していない。またインフラは今後変える可能性あり。
+- **定期実行**: Kubernetes CronJob のスケジュールで自動実行
+- **認証**: 環境変数の TOTP シークレットから OTP を生成してログイン
+- **データ取得**: Playwright を使用して MoneyForward Me からデータをスクレイピング
+- **データ保存**: PostgreSQL データベースに構造化して保存
+- **キャッシュ無効化**: `POST /api/revalidate` で Next.js の ISR キャッシュを即時更新
+- **Slack 通知**: 更新結果を Slack に投稿（オプション）
 
 ## 開発
 
-[UIコンポーネント集](https://hiroppy.github.io/mf-dashboard/storybook/)
-
 ```sh
-$ git clone xxx
-$ cd mf-dashboard
-$ cp .env.sample .env  # demoで確認したいだけであれば不要
-$ pnpm i
-# demoデータで確認
-$ pnpm dev:demo
-# 実際のアカウントのデータを取得する場合
-$ pnpm db:dev
-$ pnpm dev
+git clone <repo-url>
+cd mf-dashboard
+pnpm i
+
+# PostgreSQL を起動
+docker compose up -d db
+
+# 開発サーバー起動
+pnpm dev
 ```
 
-## 更新
-
-```sh
-$ sh update.sh
-```
+詳細は [セットアップガイド](/docs/setup.md) を参照。

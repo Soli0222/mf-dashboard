@@ -25,8 +25,10 @@ description: Use when adding/modifying database tables or columns in Drizzle ORM
 ## Template
 
 ```typescript
-export const newTable = sqliteTable("new_table", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+
+export const newTable = pgTable("new_table", {
+  id: serial("id").primaryKey(),
   // ... your columns ...
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -39,12 +41,13 @@ export const newTable = sqliteTable("new_table", {
 foreignKeyColumn: integer("foreign_key_column")
   .notNull()
   .references(() => parentTable.id, { onDelete: "cascade" }),
+// Note: Use serial() for auto-increment primary keys, integer() for regular integers
 ```
 
 ## Index Template
 
 ```typescript
-export const myTable = sqliteTable(
+export const myTable = pgTable(
   "my_table",
   {
     // columns...

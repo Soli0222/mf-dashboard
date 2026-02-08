@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    env_file:
+      - .config/postgres.env
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  crawler:
+    build:
+      context: .
+      dockerfile: apps/crawler/Dockerfile
+    env_file:
+      - .config/apps.env
+      - .config/postgres.env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "pnpm --filter @moneyforward-daily-action/crawler start"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3050:3000"
+    env_file:
+      - .config/apps.env
+      - .config/postgres.env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

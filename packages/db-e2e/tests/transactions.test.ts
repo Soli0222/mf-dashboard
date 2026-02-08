@@ -48,7 +48,7 @@ describe.skip("Transaction比較: スクレイピング vs DB", () => {
     await page?.close();
     await context?.close();
     await browser?.close();
-    closeDb();
+    await closeDb();
   });
 
   it("全グループの直近5ヶ月のtransactionがDBと一致すること", async () => {
@@ -60,7 +60,7 @@ describe.skip("Transaction比較: スクレイピング vs DB", () => {
     const pageGroups = await getPageGroups(page);
 
     // DBからグループを取得
-    const dbGroups = getDbGroups(db);
+    const dbGroups = await getDbGroups(db);
 
     if (dbGroups.length === 0) {
       throw new Error("DBにグループが存在しません");
@@ -99,7 +99,7 @@ describe.skip("Transaction比較: スクレイピング vs DB", () => {
       }
 
       for (const { month, data } of cashFlowHistory) {
-        const comparison = compareTransactions(month, group.id, group.name, data, db);
+        const comparison = await compareTransactions(month, group.id, group.name, data, db);
         allComparisons.push(comparison);
 
         const result = formatComparisonResult(comparison);

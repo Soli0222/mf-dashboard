@@ -6,28 +6,23 @@
  * 収支・振替・取引の整合性を保つ。
  *
  * 使い方:
- *   DB_PATH=../../data/demo.db npx tsx src/seed.ts
+ *   DATABASE_URL=postgresql://mf:mf@localhost:5432/mf_dashboard npx tsx src/seed.ts
  */
 
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { unlinkSync, existsSync } from "node:fs";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
 import { join } from "node:path";
+import pg from "pg";
 import * as schema from "./schema/schema";
 
 // ---------------------------------------------------------------------------
 // DB 初期化
 // ---------------------------------------------------------------------------
-const dbPath =
-  process.env.DB_PATH || join(import.meta.dirname, "..", "..", "..", "data", "demo.db");
+const databaseUrl = process.env.DATABASE_URL || "postgresql://mf:mf@localhost:5432/mf_dashboard";
 
-if (existsSync(dbPath)) unlinkSync(dbPath);
-
-const sqlite = new Database(dbPath);
-sqlite.pragma("journal_mode = WAL");
-const db = drizzle(sqlite, { schema });
-migrate(db, { migrationsFolder: join(import.meta.dirname, "../drizzle") });
+const pool = new pg.Pool({ connectionString: databaseUrl });
+const db = drizzlePg(pool, { schema });
+await migratePg(db, { migrationsFolder: join(import.meta.dirname, "../drizzle") });
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -114,40 +109,34 @@ const GROUP_ID_INVESTMENT = "demo_group_001"; // 投資グループ
 const GROUP_ID_LIVING = "demo_group_002"; // 生活グループ
 
 // グループ選択なし（全アカウント、isCurrent=true）
-db.insert(schema.groups)
-  .values({
-    id: GROUP_ID,
-    name: "グループ選択なし",
-    isCurrent: true,
-    lastScrapedAt: now(),
-    createdAt: now(),
-    updatedAt: now(),
-  })
-  .run();
+await db.insert(schema.groups).values({
+  id: GROUP_ID,
+  name: "グループ選択なし",
+  isCurrent: true,
+  lastScrapedAt: now(),
+  createdAt: now(),
+  updatedAt: now(),
+});
 
 // 投資グループ
-db.insert(schema.groups)
-  .values({
-    id: GROUP_ID_INVESTMENT,
-    name: "投資",
-    isCurrent: false,
-    lastScrapedAt: now(),
-    createdAt: now(),
-    updatedAt: now(),
-  })
-  .run();
+await db.insert(schema.groups).values({
+  id: GROUP_ID_INVESTMENT,
+  name: "投資",
+  isCurrent: false,
+  lastScrapedAt: now(),
+  createdAt: now(),
+  updatedAt: now(),
+});
 
 // 生活グループ
-db.insert(schema.groups)
-  .values({
-    id: GROUP_ID_LIVING,
-    name: "生活",
-    isCurrent: false,
-    lastScrapedAt: now(),
-    createdAt: now(),
-    updatedAt: now(),
-  })
-  .run();
+await db.insert(schema.groups).values({
+  id: GROUP_ID_LIVING,
+  name: "生活",
+  isCurrent: false,
+  lastScrapedAt: now(),
+  createdAt: now(),
+  updatedAt: now(),
+});
 
 // グループ定義: どのカテゴリがどのグループに属するか
 const ALL_GROUP_IDS = [GROUP_ID, GROUP_ID_INVESTMENT, GROUP_ID_LIVING] as const;
@@ -191,7 +180,7 @@ const instCategories = [
 const instCatIds: Record<string, number> = {};
 for (const ic of instCategories) {
   const ts = now();
-  const result = db
+  const [result] = await db
     .insert(schema.institutionCategories)
     .values({
       name: ic.name,
@@ -199,8 +188,7 @@ for (const ic of instCategories) {
       createdAt: ts,
       updatedAt: ts,
     })
-    .returning({ id: schema.institutionCategories.id })
-    .get();
+    .returning({ id: schema.institutionCategories.id });
   instCatIds[ic.name] = result!.id;
 }
 
@@ -212,15 +200,14 @@ const assetCats = ["預金・現金・暗号資産", "株式(現物)", "投資�
 const assetCatIds: Record<string, number> = {};
 for (const name of assetCats) {
   const ts = now();
-  const result = db
+  const [result] = await db
     .insert(schema.assetCategories)
     .values({
       name,
       createdAt: ts,
       updatedAt: ts,
     })
-    .returning({ id: schema.assetCategories.id })
-    .get();
+    .returning({ id: schema.assetCategories.id });
   assetCatIds[name] = result!.id;
 }
 
@@ -329,7 +316,7 @@ const accountDefs: AccountDef[] = [
 const accountIds: Record<string, number> = {};
 for (const a of accountDefs) {
   const ts = now();
-  const result = db
+  const [result] = await db
     .insert(schema.accounts)
     .values({
       mfId: mfId(),
@@ -341,42 +328,35 @@ for (const a of accountDefs) {
       createdAt: ts,
       updatedAt: ts,
     })
-    .returning({ id: schema.accounts.id })
-    .get();
+    .returning({ id: schema.accounts.id });
   accountIds[a.name] = result!.id;
 
   // Link account to グループ選択なし (all accounts)
-  db.insert(schema.groupAccounts)
-    .values({
-      groupId: GROUP_ID,
-      accountId: result!.id,
-      createdAt: ts,
-      updatedAt: ts,
-    })
-    .run();
+  await db.insert(schema.groupAccounts).values({
+    groupId: GROUP_ID,
+    accountId: result!.id,
+    createdAt: ts,
+    updatedAt: ts,
+  });
 
   // Link to 投資 group if it's an investment account
   if (investmentCategories.has(a.categoryName)) {
-    db.insert(schema.groupAccounts)
-      .values({
-        groupId: GROUP_ID_INVESTMENT,
-        accountId: result!.id,
-        createdAt: ts,
-        updatedAt: ts,
-      })
-      .run();
+    await db.insert(schema.groupAccounts).values({
+      groupId: GROUP_ID_INVESTMENT,
+      accountId: result!.id,
+      createdAt: ts,
+      updatedAt: ts,
+    });
   }
 
   // Link to 生活 group if it's a living-related account
   if (livingCategories.has(a.categoryName)) {
-    db.insert(schema.groupAccounts)
-      .values({
-        groupId: GROUP_ID_LIVING,
-        accountId: result!.id,
-        createdAt: ts,
-        updatedAt: ts,
-      })
-      .run();
+    await db.insert(schema.groupAccounts).values({
+      groupId: GROUP_ID_LIVING,
+      accountId: result!.id,
+      createdAt: ts,
+      updatedAt: ts,
+    });
   }
 }
 
@@ -619,7 +599,7 @@ function calcGroupTotals(groupId: string): { assets: number; liabilities: number
 // すべてのholdingValuesをこのスナップショットに紐づける
 // グループフィルタリングはaccountIdsで行う
 const snapshotDate = dateStr(YEAR_END, MONTH_END, today.getDate());
-const snapshotResult = db
+const [snapshotResult] = await db
   .insert(schema.dailySnapshots)
   .values({
     groupId: GROUP_ID, // "0" = グループ選択なし
@@ -627,8 +607,7 @@ const snapshotResult = db
     createdAt: now(),
     updatedAt: now(),
   })
-  .returning({ id: schema.dailySnapshots.id })
-  .get();
+  .returning({ id: schema.dailySnapshots.id });
 const snapshotId = snapshotResult!.id;
 
 // アカウントごとの資産合計を集計
@@ -639,7 +618,7 @@ for (const h of holdingDefs) {
   const catId = h.assetCategory ? assetCatIds[h.assetCategory] : null;
   const ts = now();
 
-  const holdingResult = db
+  const [holdingResult] = await db
     .insert(schema.holdings)
     .values({
       mfId: mfId(),
@@ -653,27 +632,24 @@ for (const h of holdingDefs) {
       createdAt: ts,
       updatedAt: ts,
     })
-    .returning({ id: schema.holdings.id })
-    .get();
+    .returning({ id: schema.holdings.id });
   const holdingId = holdingResult!.id;
 
   // すべてのholdingValuesを1つのスナップショットに紐づける
   // グループフィルタリングはクエリ時にaccountIdsで行う
-  db.insert(schema.holdingValues)
-    .values({
-      holdingId,
-      snapshotId,
-      amount: h.amount,
-      quantity: h.quantity ?? null,
-      unitPrice: h.unitPrice ?? null,
-      avgCostPrice: h.avgCostPrice ?? null,
-      dailyChange: h.dailyChange ?? null,
-      unrealizedGain: h.unrealizedGain ?? null,
-      unrealizedGainPct: h.unrealizedGainPct ?? null,
-      createdAt: ts,
-      updatedAt: ts,
-    })
-    .run();
+  await db.insert(schema.holdingValues).values({
+    holdingId,
+    snapshotId,
+    amount: h.amount,
+    quantity: h.quantity ?? null,
+    unitPrice: h.unitPrice ?? null,
+    avgCostPrice: h.avgCostPrice ?? null,
+    dailyChange: h.dailyChange ?? null,
+    unrealizedGain: h.unrealizedGain ?? null,
+    unrealizedGainPct: h.unrealizedGainPct ?? null,
+    createdAt: ts,
+    updatedAt: ts,
+  });
 
   // アカウントステータス用に集計
   if (h.type === "asset") {
@@ -697,17 +673,15 @@ for (const a of accountDefs) {
     status = "updating";
   }
 
-  db.insert(schema.accountStatuses)
-    .values({
-      accountId: accId,
-      status,
-      lastUpdated: ts,
-      totalAssets: accountTotalAssets[accId] || 0,
-      errorMessage,
-      createdAt: ts,
-      updatedAt: ts,
-    })
-    .run();
+  await db.insert(schema.accountStatuses).values({
+    accountId: accId,
+    status,
+    lastUpdated: ts,
+    totalAssets: accountTotalAssets[accId] || 0,
+    errorMessage,
+    createdAt: ts,
+    updatedAt: ts,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1566,30 +1540,30 @@ forEachMonth((y, m) => {
 });
 
 // トランザクションをDBへINSERT (バッチ)
-const insertTxBatch = sqlite.transaction(() => {
-  for (const tx of allTransactions) {
-    const ts = now();
-    db.insert(schema.transactions)
-      .values({
-        mfId: tx.mfId,
-        date: tx.date,
-        accountId: tx.accountId,
-        category: tx.category,
-        subCategory: tx.subCategory,
-        description: tx.description,
-        amount: tx.amount,
-        type: tx.type,
-        isTransfer: tx.isTransfer,
-        isExcludedFromCalculation: tx.isExcludedFromCalculation,
-        transferTarget: tx.transferTarget,
-        transferTargetAccountId: tx.transferTargetAccountId,
+const insertTxBatch = async () => {
+  await db.transaction(async (tx) => {
+    for (const txn of allTransactions) {
+      const ts = now();
+      await tx.insert(schema.transactions).values({
+        mfId: txn.mfId,
+        date: txn.date,
+        accountId: txn.accountId,
+        category: txn.category,
+        subCategory: txn.subCategory,
+        description: txn.description,
+        amount: txn.amount,
+        type: txn.type,
+        isTransfer: txn.isTransfer,
+        isExcludedFromCalculation: txn.isExcludedFromCalculation,
+        transferTarget: txn.transferTarget,
+        transferTargetAccountId: txn.transferTargetAccountId,
         createdAt: ts,
         updatedAt: ts,
-      })
-      .run();
-  }
-});
-insertTxBatch();
+      });
+    }
+  });
+};
+await insertTxBatch();
 
 console.log(`取引件数: ${allTransactions.length}`);
 
@@ -1778,180 +1752,161 @@ const LIVING_DEPOSITS = holdingDefs
 const LIVING_FINAL_DEPOSIT = LIVING_DEPOSITS; // ゆうちょ銀行を除く
 const LIVING_FINAL_POINT = FINAL_POINT;
 
-const insertAHBatch = sqlite.transaction(() => {
-  // 各グループ用にassetHistoryを生成
-  for (const groupId of ALL_GROUP_IDS) {
-    const finalAssets = groupFinalAssets[groupId];
-    const groupDailyData = generateDailyAssetData(groupId, finalAssets);
-    let prevTotal = groupDailyData[0]?.total ?? 0;
-    const lastIdx = groupDailyData.length - 1;
+const insertAHBatch = async () => {
+  await db.transaction(async (tx) => {
+    // 各グループ用にassetHistoryを生成
+    for (const groupId of ALL_GROUP_IDS) {
+      const finalAssets = groupFinalAssets[groupId];
+      const groupDailyData = generateDailyAssetData(groupId, finalAssets);
+      let prevTotal = groupDailyData[0]?.total ?? 0;
+      const lastIdx = groupDailyData.length - 1;
 
-    for (let i = 0; i < groupDailyData.length; i++) {
-      const { date, total } = groupDailyData[i];
-      const change = total - prevTotal;
-      const ts = now();
+      for (let i = 0; i < groupDailyData.length; i++) {
+        const { date, total } = groupDailyData[i];
+        const change = total - prevTotal;
+        const ts = now();
 
-      const ahResult = db
-        .insert(schema.assetHistory)
-        .values({
-          groupId,
-          date,
-          totalAssets: total,
-          change,
-          createdAt: ts,
-          updatedAt: ts,
-        })
-        .returning({ id: schema.assetHistory.id })
-        .get();
-      const ahId = ahResult!.id;
-
-      // グループに応じてカテゴリを計算・挿入
-      if (groupId === GROUP_ID) {
-        // グループ選択なし: 全カテゴリ
-        let fund: number, stock: number, pension: number, point: number, deposit: number;
-        if (i === lastIdx) {
-          fund = FINAL_FUND;
-          stock = FINAL_STOCK;
-          pension = FINAL_PENSION;
-          point = FINAL_POINT;
-          deposit = FINAL_DEPOSIT;
-        } else {
-          fund = categoryAmount(i, FINAL_FUND, fundStartDay);
-          stock = stockAmount(i);
-          pension = categoryAmount(i, FINAL_PENSION, pensionStartDay);
-          point = categoryAmount(i, FINAL_POINT, pointStartDay);
-          deposit = Math.max(0, total - fund - stock - pension - point);
-        }
-
-        db.insert(schema.assetHistoryCategories)
+        const [ahResult] = await tx
+          .insert(schema.assetHistory)
           .values({
+            groupId,
+            date,
+            totalAssets: total,
+            change,
+            createdAt: ts,
+            updatedAt: ts,
+          })
+          .returning({ id: schema.assetHistory.id });
+        const ahId = ahResult!.id;
+
+        // グループに応じてカテゴリを計算・挿入
+        if (groupId === GROUP_ID) {
+          // グループ選択なし: 全カテゴリ
+          let fund: number, stock: number, pension: number, point: number, deposit: number;
+          if (i === lastIdx) {
+            fund = FINAL_FUND;
+            stock = FINAL_STOCK;
+            pension = FINAL_PENSION;
+            point = FINAL_POINT;
+            deposit = FINAL_DEPOSIT;
+          } else {
+            fund = categoryAmount(i, FINAL_FUND, fundStartDay);
+            stock = stockAmount(i);
+            pension = categoryAmount(i, FINAL_PENSION, pensionStartDay);
+            point = categoryAmount(i, FINAL_POINT, pointStartDay);
+            deposit = Math.max(0, total - fund - stock - pension - point);
+          }
+
+          await tx.insert(schema.assetHistoryCategories).values({
             assetHistoryId: ahId,
             categoryName: "預金・現金・暗号資産",
             amount: deposit,
             createdAt: ts,
             updatedAt: ts,
-          })
-          .run();
-        if (fund > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+          });
+          if (fund > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "投資信託",
               amount: fund,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-        if (stock > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+            });
+          if (stock > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "株式(現物)",
               amount: stock,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-        if (pension > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+            });
+          if (pension > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "年金",
               amount: pension,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-        if (point > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+            });
+          if (point > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "ポイント・マイル",
               amount: point,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-      } else if (groupId === GROUP_ID_INVESTMENT) {
-        // 投資グループ: 投資信託、株式、年金
-        let fund: number, stock: number, pension: number;
-        if (i === lastIdx) {
-          fund = INVESTMENT_FINAL_FUND;
-          stock = INVESTMENT_FINAL_STOCK;
-          pension = INVESTMENT_FINAL_PENSION;
-        } else {
-          fund = categoryAmount(i, INVESTMENT_FINAL_FUND, fundStartDay);
-          stock = stockAmount(i);
-          pension = categoryAmount(i, INVESTMENT_FINAL_PENSION, pensionStartDay);
-        }
+            });
+        } else if (groupId === GROUP_ID_INVESTMENT) {
+          // 投資グループ: 投資信託、株式、年金
+          let fund: number, stock: number, pension: number;
+          if (i === lastIdx) {
+            fund = INVESTMENT_FINAL_FUND;
+            stock = INVESTMENT_FINAL_STOCK;
+            pension = INVESTMENT_FINAL_PENSION;
+          } else {
+            fund = categoryAmount(i, INVESTMENT_FINAL_FUND, fundStartDay);
+            stock = stockAmount(i);
+            pension = categoryAmount(i, INVESTMENT_FINAL_PENSION, pensionStartDay);
+          }
 
-        if (fund > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+          if (fund > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "投資信託",
               amount: fund,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-        if (stock > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+            });
+          if (stock > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "株式(現物)",
               amount: stock,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-        if (pension > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+            });
+          if (pension > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "年金",
               amount: pension,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
-      } else if (groupId === GROUP_ID_LIVING) {
-        // 生活グループ: 預金・現金、ポイント
-        let deposit: number, point: number;
-        if (i === lastIdx) {
-          deposit = LIVING_FINAL_DEPOSIT;
-          point = LIVING_FINAL_POINT;
-        } else {
-          point = categoryAmount(i, LIVING_FINAL_POINT, pointStartDay);
-          deposit = Math.max(0, total - point);
-        }
+            });
+        } else if (groupId === GROUP_ID_LIVING) {
+          // 生活グループ: 預金・現金、ポイント
+          let deposit: number, point: number;
+          if (i === lastIdx) {
+            deposit = LIVING_FINAL_DEPOSIT;
+            point = LIVING_FINAL_POINT;
+          } else {
+            point = categoryAmount(i, LIVING_FINAL_POINT, pointStartDay);
+            deposit = Math.max(0, total - point);
+          }
 
-        db.insert(schema.assetHistoryCategories)
-          .values({
+          await tx.insert(schema.assetHistoryCategories).values({
             assetHistoryId: ahId,
             categoryName: "預金・現金・暗号資産",
             amount: deposit,
             createdAt: ts,
             updatedAt: ts,
-          })
-          .run();
-        if (point > 0)
-          db.insert(schema.assetHistoryCategories)
-            .values({
+          });
+          if (point > 0)
+            await tx.insert(schema.assetHistoryCategories).values({
               assetHistoryId: ahId,
               categoryName: "ポイント・マイル",
               amount: point,
               createdAt: ts,
               updatedAt: ts,
-            })
-            .run();
+            });
+        }
+
+        prevTotal = total;
       }
-
-      prevTotal = total;
     }
-  }
-});
-insertAHBatch();
+  });
+};
+await insertAHBatch();
 
 console.log(`資産履歴日数: ${dailyAssetData.length}`);
 
@@ -1987,23 +1942,21 @@ for (const groupId of ALL_GROUP_IDS) {
 
   for (const st of spendingTargetDefs) {
     const ts = now();
-    db.insert(schema.spendingTargets)
-      .values({
-        groupId,
-        largeCategoryId: st.largeCategoryId,
-        categoryName: st.categoryName,
-        type: st.type,
-        createdAt: ts,
-        updatedAt: ts,
-      })
-      .run();
+    await db.insert(schema.spendingTargets).values({
+      groupId,
+      largeCategoryId: st.largeCategoryId,
+      categoryName: st.categoryName,
+      type: st.type,
+      createdAt: ts,
+      updatedAt: ts,
+    });
   }
 }
 
 // ---------------------------------------------------------------------------
 // 完了
 // ---------------------------------------------------------------------------
-sqlite.close();
+await pool.end();
 
 // 年間収支を計算（グループ選択なし）
 const yearTotalIncome = Object.values(groupMonthlyData[GROUP_ID].income).reduce((s, v) => s + v, 0);
@@ -2012,7 +1965,7 @@ const yearTotalExpense = Object.values(groupMonthlyData[GROUP_ID].expense).reduc
   0,
 );
 
-console.log(`\nデモデータの生成が完了しました: ${dbPath}`);
+console.log(`\nデモデータの生成が完了しました: ${databaseUrl}`);
 console.log(`総資産: ¥${totalAssets.toLocaleString()}`);
 console.log(`総負債: ¥${totalLiabilities.toLocaleString()}`);
 console.log(`純資産: ¥${netAssets.toLocaleString()}`);

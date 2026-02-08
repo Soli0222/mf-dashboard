@@ -1,58 +1,66 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { existsSync } from "node:fs";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { join } from "node:path";
+import pg from "pg";
 import * as schema from "./schema/schema";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-let _sqlite: Database.Database | null = null;
+let _pool: pg.Pool | null = null;
 
-function getDbPath() {
-  if (process.env.DB_PATH) {
-    return process.env.DB_PATH;
+function getDatabaseUrl(): string {
+  // DATABASE_URL が直接指定されていればそのまま使う
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
   }
-  // Try cwd first, then try going up directories
-  const cwdDataDir = join(process.cwd(), "data");
-  if (existsSync(cwdDataDir)) {
-    return join(cwdDataDir, "moneyforward.db");
+
+  // 個別の POSTGRES_* 環境変数から組み立てる
+  const user = process.env.POSTGRES_USER;
+  const password = process.env.POSTGRES_PASSWORD;
+  const db = process.env.POSTGRES_DB;
+  const host = process.env.POSTGRES_HOST ?? "localhost";
+  const port = process.env.POSTGRES_PORT ?? "5432";
+
+  if (user && password && db) {
+    return `postgresql://${user}:${password}@${host}:${port}/${db}`;
   }
-  // apps/web or apps/crawler -> monorepo root
-  const rootDataDir = join(process.cwd(), "..", "..", "data");
-  if (existsSync(rootDataDir)) {
-    return join(rootDataDir, "moneyforward.db");
-  }
-  return join(cwdDataDir, "moneyforward.db");
+
+  throw new Error(
+    "Database connection not configured. Set DATABASE_URL or POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB.",
+  );
 }
 
 export function isDatabaseAvailable(): boolean {
-  return existsSync(getDbPath());
+  return !!(process.env.DATABASE_URL || (process.env.POSTGRES_USER && process.env.POSTGRES_DB));
 }
 
 export function getDb() {
   if (!_db) {
-    _sqlite = new Database(getDbPath());
-    _sqlite.pragma("journal_mode = WAL");
-    _db = drizzle(_sqlite, { schema });
+    _pool = new pg.Pool({ connectionString: getDatabaseUrl() });
+    _db = drizzle(_pool, { schema });
   }
   return _db;
 }
 
-export function closeDb() {
-  if (_sqlite) {
-    _sqlite.close();
-    _sqlite = null;
+export async function closeDb() {
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
     _db = null;
   }
 }
 
-export type Db = ReturnType<typeof getDb>;
+/**
+ * Generic Db type compatible with both NodePgDatabase and PgliteDatabase.
+ * This allows test code using PGlite to share the same type as production code using node-postgres.
+ */
+export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
-export function initDb() {
+export async function initDb() {
   const db = getDb();
 
   // Apply migrations
-  migrate(db, { migrationsFolder: join(import.meta.dirname, "../drizzle") });
+  await migrate(db, { migrationsFolder: join(import.meta.dirname, "../drizzle") });
 
   return db;
 }

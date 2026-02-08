@@ -9,24 +9,16 @@ if (existsSync(rootEnvPath)) {
   loadEnvFile(rootEnvPath);
 }
 
-const isGitHubPages = process.env.GITHUB_PAGES === "true";
-const basePath = isGitHubPages ? `/${process.env.NEXT_PUBLIC_GITHUB_REPO}` : "";
-
-// Set NEXT_PUBLIC_BASE_PATH for client-side use (e.g., images)
-process.env.NEXT_PUBLIC_BASE_PATH = basePath;
-
 const nextConfig: NextConfig = {
-  output: "export",
+  output: "standalone",
   typedRoutes: true,
   images: {
     unoptimized: true,
   },
-  trailingSlash: true,
   reactCompiler: true,
   experimental: {
     typedEnv: true,
   },
-  basePath,
 };
 
 export default nextConfig;

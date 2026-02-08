@@ -1,6 +1,7 @@
 "use client";
 
-import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
+import { Treemap, Tooltip } from "recharts";
+import { ClientResponsiveContainer } from "./client-responsive-container";
 import { formatCurrency } from "../../lib/format";
 import { chartTooltipStyle } from "./chart-tooltip";
 
@@ -92,7 +93,7 @@ export function TreemapChart({ data, height = 200 }: TreemapChartProps) {
   if (data.length === 0) return null;
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ClientResponsiveContainer width="100%" height={height}>
       <Treemap
         data={data}
         dataKey="value"
@@ -109,6 +110,6 @@ export function TreemapChart({ data, height = 200 }: TreemapChartProps) {
           contentStyle={chartTooltipStyle}
         />
       </Treemap>
-    </ResponsiveContainer>
+    </ClientResponsiveContainer>
   );
 }

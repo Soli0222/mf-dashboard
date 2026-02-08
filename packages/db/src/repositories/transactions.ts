@@ -6,11 +6,11 @@ import { convertToIsoDate, now, upsertById } from "../utils";
 
 const BATCH_SIZE = 500;
 
-export function saveTransaction(
+export async function saveTransaction(
   db: Db,
   item: CashFlowItem,
   accountIdMap?: Map<string, number>,
-): void {
+): Promise<void> {
   // Skip items without valid mfId
   if (!item.mfId || item.mfId.startsWith("unknown")) {
     return;
@@ -64,32 +64,31 @@ export function saveTransaction(
     transferTargetAccountId,
   };
 
-  upsertById(db, schema.transactions, eq(schema.transactions.mfId, item.mfId), data, data);
+  await upsertById(db, schema.transactions, eq(schema.transactions.mfId, item.mfId), data, data);
 }
 
 /**
  * 指定月にトランザクションが存在するかチェック
  * @param month "2026-01" 形式
  */
-export function hasTransactionsForMonth(db: Db, month: string): boolean {
-  const result = db
+export async function hasTransactionsForMonth(db: Db, month: string): Promise<boolean> {
+  const rows = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.transactions)
-    .where(like(schema.transactions.date, `${month}%`))
-    .get();
-  return (result?.count ?? 0) > 0;
+    .where(like(schema.transactions.date, `${month}%`));
+  return Number(rows[0]?.count ?? 0) > 0;
 }
 
 /**
  * 指定月のトランザクションを削除
  * @param month "2026-01" 形式
  */
-export function deleteTransactionsForMonth(db: Db, month: string): number {
-  const result = db
+export async function deleteTransactionsForMonth(db: Db, month: string): Promise<number> {
+  const deleted = await db
     .delete(schema.transactions)
     .where(like(schema.transactions.date, `${month}%`))
-    .run();
-  return result.changes;
+    .returning({ id: schema.transactions.id });
+  return deleted.length;
 }
 
 /**
@@ -157,14 +156,14 @@ function prepareTransactionData(
 /**
  * 指定月のトランザクションを保存（既存データは削除して上書き）
  */
-export function saveTransactionsForMonth(
+export async function saveTransactionsForMonth(
   db: Db,
   month: string,
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
-): number {
+): Promise<number> {
   // 既存データを削除
-  const deleted = deleteTransactionsForMonth(db, month);
+  const deleted = await deleteTransactionsForMonth(db, month);
   if (deleted > 0) {
     console.log(`  Deleted ${deleted} existing transactions for ${month}`);
   }
@@ -190,7 +189,8 @@ export function saveTransactionsForMonth(
       };
     });
 
-    db.insert(schema.transactions)
+    await db
+      .insert(schema.transactions)
       .values(records)
       .onConflictDoUpdate({
         target: schema.transactions.mfId,
@@ -208,8 +208,7 @@ export function saveTransactionsForMonth(
           transferTargetAccountId: sql`excluded.transfer_target_account_id`,
           updatedAt: timestamp,
         },
-      })
-      .run();
+      });
   }
 
   return validItems.length;

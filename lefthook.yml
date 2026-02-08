@@ -1,7 +1,11 @@
+rc: |
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
 pre-commit:
   commands:
     format:
-      glob: "*.{ts,tsx,js,jsx,json,css,yml,yaml,md}"
+      glob: "*.{ts,tsx,js,jsx,json,css}"
       run: pnpm oxfmt {staged_files}
       stage_fixed: true
     lint:
@@ -12,13 +16,3 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx}"
       run: pnpm knip --fix
       stage_fixed: true
-
-post-merge:
-  commands:
-    clean-wal:
-      run: rm -f data/*.db-shm data/*.db-wal
-
-post-checkout:
-  commands:
-    clean-wal:
-      run: rm -f data/*.db-shm data/*.db-wal
