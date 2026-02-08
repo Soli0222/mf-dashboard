@@ -63,7 +63,7 @@ async function maybeHandleOtp(
     await otpInput.waitFor({ state: "visible", timeout });
 
     debug(`${label} OTP required, generating...`);
-    const otp = await getOTP();
+    const otp = getOTP();
     await otpInput.fill(otp);
     debug("Clicking verify button...");
     await page.locator(submitSelector).first().click();
@@ -133,7 +133,7 @@ export async function loginWithAuthState(page: Page, context: BrowserContext): P
 }
 
 export async function login(page: Page): Promise<void> {
-  const { username, password } = await getCredentials();
+  const { username, password } = getCredentials();
 
   debug("Navigating to login page...");
   await page.goto(mfUrls.auth.signIn, {

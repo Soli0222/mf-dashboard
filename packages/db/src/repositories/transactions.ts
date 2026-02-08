@@ -76,7 +76,7 @@ export async function hasTransactionsForMonth(db: Db, month: string): Promise<bo
     .select({ count: sql<number>`count(*)` })
     .from(schema.transactions)
     .where(like(schema.transactions.date, `${month}%`));
-  return (Number(rows[0]?.count) ?? 0) > 0;
+  return Number(rows[0]?.count ?? 0) > 0;
 }
 
 /**

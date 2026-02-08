@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from "playwright";
-import { initDb, closeDb, getDb, schema } from "@moneyforward-daily-action/db";
+import { initDb, getDb } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { sql } from "drizzle-orm";
 import path from "node:path";

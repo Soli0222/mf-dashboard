@@ -9,6 +9,9 @@ const preview: Preview = {
     viewport: { value: "reset", isRotated: false },
   },
   parameters: {
+    react: {
+      rsc: true,
+    },
     a11y: {
       test: "error",
     },

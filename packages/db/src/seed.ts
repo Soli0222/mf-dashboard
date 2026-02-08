@@ -9,10 +9,10 @@
  *   DATABASE_URL=postgresql://mf:mf@localhost:5432/mf_dashboard npx tsx src/seed.ts
  */
 
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
 import { join } from "node:path";
+import pg from "pg";
 import * as schema from "./schema/schema";
 
 // ---------------------------------------------------------------------------
@@ -20,9 +20,9 @@ import * as schema from "./schema/schema";
 // ---------------------------------------------------------------------------
 const databaseUrl = process.env.DATABASE_URL || "postgresql://mf:mf@localhost:5432/mf_dashboard";
 
-const client = new PGlite(databaseUrl);
-const db = drizzle(client, { schema });
-await migrate(db, { migrationsFolder: join(import.meta.dirname, "../drizzle") });
+const pool = new pg.Pool({ connectionString: databaseUrl });
+const db = drizzlePg(pool, { schema });
+await migratePg(db, { migrationsFolder: join(import.meta.dirname, "../drizzle") });
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -1956,7 +1956,7 @@ for (const groupId of ALL_GROUP_IDS) {
 // ---------------------------------------------------------------------------
 // 完了
 // ---------------------------------------------------------------------------
-await client.close();
+await pool.end();
 
 // 年間収支を計算（グループ選択なし）
 const yearTotalIncome = Object.values(groupMonthlyData[GROUP_ID].income).reduce((s, v) => s + v, 0);
