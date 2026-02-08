@@ -6,10 +6,6 @@ metadata:
   labels:
     {{- include "mf-dashboard.labels" . | nindent 4 }}
     app.kubernetes.io/component: crawler
-  annotations:
-    helm.sh/hook: post-install
-    helm.sh/hook-weight: "0"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   backoffLimit: {{ .Values.cronjob.backoffLimit }}
   template:
@@ -21,7 +17,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: crawler
-          image: "{{ .Values.crawler.image.repository }}:{{ .Values.crawler.image.tag }}"
+          image: "{{ .Values.crawler.image.repository }}:{{ .Values.crawler.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.crawler.image.pullPolicy }}
           envFrom:
             - secretRef:
@@ -31,14 +27,7 @@ spec:
             - name: CRAWLER_TIMEOUT_MS
               value: {{ .Values.crawler.timeoutMs | quote }}
             - name: REVALIDATION_URL
-              value: "http://{{ include "mf-dashboard.fullname" . }}-web.{{ .Release.Namespace }}.svc.cluster.local/api/revalidate"
-            {{- if .Values.credentials.revalidationToken }}
-            - name: REVALIDATION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
-                  key: REVALIDATION_TOKEN
-            {{- end }}
+              value: "http://{{ include "mf-dashboard.fullname" . }}-web.{{ .Release.Namespace }}/api/revalidate"
           resources:
             {{- toYaml .Values.crawler.resources | nindent 12 }}
 {{- end }}

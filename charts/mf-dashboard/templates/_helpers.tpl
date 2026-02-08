@@ -50,33 +50,26 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 Database environment variables (POSTGRES_*)
-Reads from existingSecret or the auto-generated credentials secret.
+Host, port, user, db are set as plain values.
+Password is read from existingSecret or the auto-generated database secret.
 */}}
 {{- define "mf-dashboard.databaseEnv" -}}
-{{- $secretName := .Values.database.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) -}}
 - name: POSTGRES_HOST
-  valueFrom:
-    secretKeyRef:
-      name: {{ $secretName }}
-      key: POSTGRES_HOST
+  value: {{ .Values.database.host | quote }}
 - name: POSTGRES_PORT
-  valueFrom:
-    secretKeyRef:
-      name: {{ $secretName }}
-      key: POSTGRES_PORT
+  value: {{ .Values.database.port | default "5432" | quote }}
 - name: POSTGRES_USER
-  valueFrom:
-    secretKeyRef:
-      name: {{ $secretName }}
-      key: POSTGRES_USER
+  value: {{ .Values.database.user | quote }}
+- name: POSTGRES_DB
+  value: {{ .Values.database.name | quote }}
 - name: POSTGRES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ $secretName }}
+      {{- if .Values.database.existingSecret.name }}
+      name: {{ .Values.database.existingSecret.name }}
+      key: {{ .Values.database.existingSecret.passwordKey | default "password" }}
+      {{- else }}
+      name: {{ include "mf-dashboard.fullname" . }}-database
       key: POSTGRES_PASSWORD
-- name: POSTGRES_DB
-  valueFrom:
-    secretKeyRef:
-      name: {{ $secretName }}
-      key: POSTGRES_DB
+      {{- end }}
 {{- end }}

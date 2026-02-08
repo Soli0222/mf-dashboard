@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
           ports:
             - name: http
@@ -27,13 +27,12 @@ spec:
               protocol: TCP
           env:
             {{- include "mf-dashboard.databaseEnv" . | nindent 12 }}
-            {{- if .Values.credentials.revalidationToken }}
             - name: REVALIDATION_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
                   key: REVALIDATION_TOKEN
-            {{- end }}
+                  optional: true
           livenessProbe:
             httpGet:
               path: /

@@ -5,8 +5,8 @@ fullnameOverride: ""
 # イメージ設定
 crawler:
   image:
-    repository: registry.str08.net/soli0222/mf-crawler
-    tag: "0.1.0"
+    repository: ghcr.io/soli0222/mf-dashboard-crawler
+    tag: ""
     pullPolicy: Always
   resources:
     requests:
@@ -21,8 +21,8 @@ crawler:
 
 web:
   image:
-    repository: registry.str08.net/soli0222/mf-web
-    tag: "0.1.0"
+    repository: ghcr.io/soli0222/mf-dashboard-web
+    tag: ""
     pullPolicy: Always
   replicaCount: 1
   resources:
@@ -36,8 +36,8 @@ web:
 # CronJob 設定
 cronjob:
   schedules:
-    - "50 21 * * *" # JST 6:50
-    - "20 6 * * *" # JST 15:20
+    - "30 10 * * *" # JST 10:30
+    - "30 18 * * *" # JST 18:30
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -45,14 +45,16 @@ cronjob:
 
 # データベース設定
 database:
-  # 接続情報（個別指定）
-  host: ""
+  # 接続情報
+  host: "mf-cluster-rw"
   port: "5432"
-  user: ""
+  user: "mf"
   password: ""
-  name: ""
-  # Secret から接続情報を取得する場合
-  existingSecret: ""
+  name: "mf-dashboard"
+  # 既存の Secret からパスワードを取得する場合
+  existingSecret:
+    name: "mf-cluster-app"        # Secret 名（空の場合は自動生成 Secret を使用）
+    passwordKey: "password"  # Secret 内のパスワードのキー名
 
 # 認証情報
 credentials:
