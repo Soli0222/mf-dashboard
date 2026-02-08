@@ -339,12 +339,12 @@ export async function getMonthlySummaries(
     .where(buildGroupTransactionCondition(accountIds))
     .groupBy(sql`substr(${schema.transactions.date}, 1, 7)`);
 
-  // DB結果をMapに変換
+  // DB結果をMapに変換（PostgreSQLのSUM()はbigintを返すためdrizzleが文字列として返す場合がある）
   const resultMap = new Map<string, { regularIncome: number; totalExpense: number }>();
   for (const r of regularResults) {
     resultMap.set(r.month, {
-      regularIncome: r.regularIncome || 0,
-      totalExpense: r.totalExpense || 0,
+      regularIncome: Number(r.regularIncome) || 0,
+      totalExpense: Number(r.totalExpense) || 0,
     });
   }
 
@@ -434,12 +434,12 @@ export async function getMonthlySummaryByMonth(
   // 重複除外した振替収入を取得
   const transferIncomeMap = await getDeduplicatedTransferIncome(db, accountIds, month);
   const transferIncome = transferIncomeMap.get(month) || 0;
-  const totalIncome = (result.regularIncome || 0) + transferIncome;
+  const totalIncome = (Number(result.regularIncome) || 0) + transferIncome;
 
   // 重複除外した振替支出を取得
   const transferExpenseMap = await getDeduplicatedTransferExpense(db, accountIds, month);
   const transferExpense = transferExpenseMap.get(month) || 0;
-  const totalExpense = (result.totalExpense || 0) + transferExpense;
+  const totalExpense = (Number(result.totalExpense) || 0) + transferExpense;
 
   return {
     month,
@@ -482,7 +482,7 @@ export async function getMonthlyCategoryTotals(
       type: schema.transactions.type,
       transferTargetAccountId: schema.transactions.transferTargetAccountId,
       accountId: schema.transactions.accountId,
-      totalAmount: sql<number>`sum(${schema.transactions.amount})`.as("total_amount"),
+      totalAmount: sql<string>`sum(${schema.transactions.amount})`.as("total_amount"),
     })
     .from(schema.transactions)
     .where(
@@ -527,13 +527,14 @@ export async function getMonthlyCategoryTotals(
 
     const key = `${effectiveCategory}-${effectiveType}`;
     const existing = categoryMap.get(key);
+    const amount = Number(r.totalAmount) || 0;
     if (existing) {
-      existing.totalAmount += r.totalAmount;
+      existing.totalAmount += amount;
     } else {
       categoryMap.set(key, {
         category: effectiveCategory,
         type: effectiveType,
-        totalAmount: r.totalAmount,
+        totalAmount: amount,
       });
     }
   }
@@ -602,7 +603,7 @@ export async function getYearToDateSummary(
   for (const amount of transferIncomeMap.values()) {
     transferIncome += amount;
   }
-  const totalIncome = (result?.regularIncome || 0) + transferIncome;
+  const totalIncome = (Number(result?.regularIncome) || 0) + transferIncome;
 
   // 重複除外した振替支出を取得（年全体）
   const transferExpenseMap = await getDeduplicatedTransferExpense(db, accountIds, yearPrefix);
@@ -610,14 +611,14 @@ export async function getYearToDateSummary(
   for (const amount of transferExpenseMap.values()) {
     transferExpense += amount;
   }
-  const totalExpense = (result?.totalExpense || 0) + transferExpense;
+  const totalExpense = (Number(result?.totalExpense) || 0) + transferExpense;
 
   return {
     year: targetYear,
     totalIncome,
     totalExpense,
     balance: totalIncome - totalExpense,
-    monthCount: result?.monthCount || 0,
+    monthCount: Number(result?.monthCount) || 0,
   };
 }
 
