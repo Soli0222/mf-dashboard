@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getMonthlySummaryByMonth } from "@moneyforward-daily-action/db";
+import { getMonthlySummaryByMonth, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { notFound } from "next/navigation";
 import { CategoryBreakdown } from "../../../components/info/category-breakdown/category-breakdown";
@@ -20,6 +20,8 @@ export async function generateMetadata({ params }: PageProps<"/cf/[month]">): Pr
 }
 
 export async function CFMonthContent({ month, groupId }: { month: string; groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
   const summary = await getMonthlySummaryByMonth(month, groupId);
 
   if (!summary) {

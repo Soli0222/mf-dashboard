@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getAccountsGroupedByCategory } from "@moneyforward-daily-action/db";
+import { getAccountsGroupedByCategory, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { AccountCard } from "../../components/info/account-card";
 import { PageLayout } from "../../components/layout/page-layout";
@@ -78,6 +78,8 @@ function AccountList({
 }
 
 export async function AccountsContent({ groupId }: { groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
   const groupedAccounts = await getAccountsGroupedByCategory(groupId);
 
   return (

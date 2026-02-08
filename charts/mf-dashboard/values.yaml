@@ -60,6 +60,7 @@ credentials:
   mfUsername: ""
   mfPassword: ""
   mfTotpSecret: ""
+  revalidationToken: ""
 
 # Slack 通知（オプション）
 slack:

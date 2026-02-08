@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { hasInvestmentHoldings } from "@moneyforward-daily-action/db";
+import { hasInvestmentHoldings, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { AssetHistoryChart } from "../../components/info/asset-history-chart";
 import { BalanceSheetChart } from "../../components/info/balance-sheet-chart";
@@ -12,6 +12,8 @@ export const metadata: Metadata = {
 };
 
 export async function BSContent({ groupId }: { groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
   const showUnrealizedGain = await hasInvestmentHoldings(groupId);
 
   return (

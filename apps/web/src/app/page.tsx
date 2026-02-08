@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { hasInvestmentHoldings } from "@moneyforward-daily-action/db";
+import { hasInvestmentHoldings, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { AssetBreakdownChart } from "../components/info/asset-breakdown-chart";
 import { AssetHistoryChart } from "../components/info/asset-history-chart";
 import { DailyChangeCard } from "../components/info/daily-change-card";
@@ -12,6 +12,8 @@ export const metadata: Metadata = {
 };
 
 export async function DashboardContent({ groupId }: { groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
   const showDailyChange = await hasInvestmentHoldings(groupId);
 
   return (

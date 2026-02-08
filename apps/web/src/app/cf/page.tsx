@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getMonthlySummaries } from "@moneyforward-daily-action/db";
+import { getMonthlySummaries, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { Suspense } from "react";
 import { MonthlyIncomeExpenseChart } from "../../components/info/monthly-income-expense-chart";
@@ -15,6 +15,8 @@ export const metadata: Metadata = {
 };
 
 export async function CFContent({ groupId }: { groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
   const monthlySummaries = await getMonthlySummaries({ groupId });
 
   // Group summaries by year

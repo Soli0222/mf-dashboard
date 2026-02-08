@@ -54,6 +54,13 @@ spec:
               protocol: TCP
           env:
             {{- include "mf-dashboard.databaseEnv" . | nindent 12 }}
+            {{- if .Values.credentials.revalidationToken }}
+            - name: REVALIDATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
+                  key: REVALIDATION_TOKEN
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /

@@ -19,6 +19,7 @@ import { createBrowserContext } from "./browser/context.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { runHooks } from "./hooks/runner.js";
 import { log, debug, info, error, section, warn } from "./logger.js";
+import { triggerRevalidation } from "./revalidate.js";
 import { scrapeAllGroups } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { isNoGroup, switchGroup, NO_GROUP_ID, createGroupScope } from "./scrapers/group.js";
@@ -188,6 +189,9 @@ async function main() {
     } catch (err) {
       error("Failed to send Slack notification:", err);
     }
+
+    // Trigger on-demand ISR revalidation
+    await triggerRevalidation();
 
     info("Completed!");
   } catch (err) {

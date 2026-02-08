@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { getAccountByMfId } from "@moneyforward-daily-action/db";
+import { getAccountByMfId, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { AccountDetailContent } from "../../../accounts/[id]/page";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/[groupId]/accounts/[id]">): Promise<Metadata> {
+  if (!isDatabaseAvailable()) return { title: "アカウント詳細" };
   const { id, groupId } = await params;
   const account = await getAccountByMfId(id, groupId);
   return {
