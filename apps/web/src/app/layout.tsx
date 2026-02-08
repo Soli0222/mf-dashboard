@@ -12,15 +12,7 @@ import { SidebarProvider } from "../components/layout/sidebar-context";
 // from the crawler's POST /api/revalidate call after each scrape.
 export const revalidate = 3600;
 
-const metadataBase =
-  process.env.GITHUB_PAGES === "true"
-    ? new URL(
-        `https://${process.env.NEXT_PUBLIC_GITHUB_ORG}.github.io/${process.env.NEXT_PUBLIC_GITHUB_REPO}/`,
-      )
-    : undefined;
-
 export const metadata: Metadata = {
-  metadataBase,
   title: {
     template: "%s | MoneyForward Me Dashboard",
     default: "MoneyForward Me Dashboard",

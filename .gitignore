@@ -14,11 +14,6 @@ debug/
 auth-state.json
 test-auth-state.json
 
-test-groups-moneyforward.db
-test-moneyforward.db*
-*.db-shm
-*.db-wal
-
 playwright-report
 test-results
 storybook-static/

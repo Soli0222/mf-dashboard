@@ -8,7 +8,6 @@
     "dev:demo": "turbo dev:demo",
     "build": "turbo build",
     "build:demo": "turbo build:demo",
-    "db:clean": "rm -f data/moneyforward.db data/moneyforward.db-wal data/moneyforward.db-shm",
     "db:dev": "pnpm --filter @moneyforward-daily-action/crawler dev:scrape",
     "test": "turbo test",
     "test:e2e:web": "turbo test:e2e --filter=@moneyforward-daily-action/web",
