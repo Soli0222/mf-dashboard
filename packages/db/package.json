@@ -21,18 +21,19 @@
     "./test-helpers": "./src/test-helpers.ts"
   },
   "scripts": {
-    "build:demo": "DB_PATH=../../data/demo.db tsx src/seed.ts",
+    "build:demo": "tsx src/seed.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "better-sqlite3": "catalog:",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "catalog:",
+    "@electric-sql/pglite": "0.3.3",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "drizzle-kit": "0.31.8",
     "typescript": "catalog:",
     "vitest": "catalog:"

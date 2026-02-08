@@ -1,18 +1,27 @@
 services:
+  db:
+    image: postgres:17-alpine
+    env_file:
+      - .config/postgres.env
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   crawler:
     build:
       context: .
       dockerfile: apps/crawler/Dockerfile
     env_file:
-      - .env
-    environment:
-      - DB_PATH=/data/moneyforward.db
-      - CRAWLER_TIMEOUT_MS=180000 # 3分
-    volumes:
-      - db-data:/data
-    # 実行後にWebコンテナから書き込めるように所有者を変更
-    # apps/web/Dockerfile で uid 1001 (nextjs) を使用しているため
-    command: sh -c "pnpm --filter @moneyforward-daily-action/crawler start && chown -R 1001:1001 /data
+      - .config/apps.env
+      - .config/postgres.env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "pnpm --filter @moneyforward-daily-action/crawler start"
 
   web:
     build:
@@ -21,13 +30,11 @@ services:
     ports:
       - "3050:3000"
     env_file:
-      - .env
-    environment:
-      - DB_PATH=/data/moneyforward.db
-      - NODE_ENV=production
-    volumes:
-      - db-data:/data
+      - .config/apps.env
+      - .config/postgres.env
     depends_on:
+      db:
+        condition: service_healthy
       crawler:
         condition: service_completed_successfully
 

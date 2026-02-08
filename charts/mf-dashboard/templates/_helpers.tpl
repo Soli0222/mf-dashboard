@@ -47,3 +47,36 @@ Selector labels
 app.kubernetes.io/name: {{ include "mf-dashboard.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Database environment variables (POSTGRES_*)
+Reads from existingSecret or the auto-generated credentials secret.
+*/}}
+{{- define "mf-dashboard.databaseEnv" -}}
+{{- $secretName := .Values.database.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) -}}
+- name: POSTGRES_HOST
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: POSTGRES_HOST
+- name: POSTGRES_PORT
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: POSTGRES_PORT
+- name: POSTGRES_USER
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: POSTGRES_USER
+- name: POSTGRES_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: POSTGRES_PASSWORD
+- name: POSTGRES_DB
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: POSTGRES_DB
+{{- end }}

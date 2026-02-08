@@ -17,18 +17,13 @@ spec:
         {{- include "mf-dashboard.labels" . | nindent 8 }}
         app.kubernetes.io/component: web
     spec:
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       {{- if .Values.crawler.initOnDeploy }}
       initContainers:
         - name: init-crawler
           image: "{{ .Values.crawler.image.repository }}:{{ .Values.crawler.image.tag }}"
           imagePullPolicy: {{ .Values.crawler.image.pullPolicy }}
           env:
-            - name: DB_PATH
-              value: /data/moneyforward.db
+            {{- include "mf-dashboard.databaseEnv" . | nindent 12 }}
             - name: CRAWLER_TIMEOUT_MS
               value: {{ .Values.crawler.timeoutMs | quote }}
             - name: MF_USERNAME
@@ -46,9 +41,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" .)) }}
                   key: MF_TOTP_SECRET
-          volumeMounts:
-            - name: data
-              mountPath: /data
           resources:
             {{- toYaml .Values.crawler.resources | nindent 12 }}
       {{- end }}
@@ -61,11 +53,7 @@ spec:
               containerPort: 3000
               protocol: TCP
           env:
-            - name: DB_PATH
-              value: /data/moneyforward.db
-          volumeMounts:
-            - name: data
-              mountPath: /data
+            {{- include "mf-dashboard.databaseEnv" . | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /
@@ -78,7 +66,3 @@ spec:
             initialDelaySeconds: 5
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "mf-dashboard.fullname" .)) }}

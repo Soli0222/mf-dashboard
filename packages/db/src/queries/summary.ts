@@ -31,7 +31,7 @@ export function buildIncludedTransactionCondition(accountIds: number[]) {
     // 通常の収入/支出（振替以外で計算対象）
     and(
       sql`${schema.transactions.type} != 'transfer'`,
-      sql`${schema.transactions.isExcludedFromCalculation} = 0`,
+      eq(schema.transactions.isExcludedFromCalculation, false),
     ),
     // グループ内→グループ外への振替（カテゴリ別表示用）
     and(
@@ -85,14 +85,14 @@ const GROUP_NONE_ID = "0";
  * 振替の収入/支出分類を判定
  * @returns 'income' | 'expense' | null (nullは除外すべき振替)
  */
-export function classifyTransfer(
+export async function classifyTransfer(
   db: Db,
   accountIdSet: Set<number>,
   sourceAccountId: number,
   targetAccountId: number,
-): "income" | "expense" | null {
+): Promise<"income" | "expense" | null> {
   // 共通グループがある場合は内部振替として除外
-  if (hasCommonGroup(db, sourceAccountId, targetAccountId)) {
+  if (await hasCommonGroup(db, sourceAccountId, targetAccountId)) {
     return null;
   }
 
@@ -111,23 +111,23 @@ export function classifyTransfer(
  * 2つのアカウントが共通のグループ（グループ選択なしを除く）に属しているかチェック
  * 共通グループがある場合、振替は内部振替として収支にカウントしない
  */
-export function hasCommonGroup(db: Db, accountId1: number, accountId2: number): boolean {
-  const groups1 = db
+export async function hasCommonGroup(
+  db: Db,
+  accountId1: number,
+  accountId2: number,
+): Promise<boolean> {
+  const groups1Rows = await db
     .select({ groupId: schema.groupAccounts.groupId })
     .from(schema.groupAccounts)
-    .where(eq(schema.groupAccounts.accountId, accountId1))
-    .all()
-    .map((g) => g.groupId)
-    .filter((id) => id !== GROUP_NONE_ID);
+    .where(eq(schema.groupAccounts.accountId, accountId1));
+  const groups1 = groups1Rows.map((g) => g.groupId).filter((id) => id !== GROUP_NONE_ID);
 
+  const groups2Rows = await db
+    .select({ groupId: schema.groupAccounts.groupId })
+    .from(schema.groupAccounts)
+    .where(eq(schema.groupAccounts.accountId, accountId2));
   const groups2Set = new Set(
-    db
-      .select({ groupId: schema.groupAccounts.groupId })
-      .from(schema.groupAccounts)
-      .where(eq(schema.groupAccounts.accountId, accountId2))
-      .all()
-      .map((g) => g.groupId)
-      .filter((id) => id !== GROUP_NONE_ID),
+    groups2Rows.map((g) => g.groupId).filter((id) => id !== GROUP_NONE_ID),
   );
 
   return groups1.some((g) => groups2Set.has(g));
@@ -145,11 +145,11 @@ export function hasCommonGroup(db: Db, accountId1: number, accountId2: number): 
  * Money Forward本家では、グループ内のアカウントからグループ外への振替を
  * 収入としてカウントしている。ただし、振替元と振替先が共通のグループに属する場合は除外。
  */
-export function getDeduplicatedTransferIncome(
+export async function getDeduplicatedTransferIncome(
   db: Db,
   accountIds: number[],
   dateCondition?: string,
-): Map<string, number> {
+): Promise<Map<string, number>> {
   // 振替トランザクションを取得
   // グループ内→グループ外への振替を収入としてカウント
   const query = db
@@ -170,7 +170,7 @@ export function getDeduplicatedTransferIncome(
       ),
     );
 
-  const transfers = query.all();
+  const transfers = await query;
 
   // 重複除外: (date, amount, accountId, transferTargetAccountId) でユニーク化
   const seen = new Set<string>();
@@ -181,7 +181,7 @@ export function getDeduplicatedTransferIncome(
     if (!t.date || !t.transferTargetAccountId || t.accountId === null) continue;
 
     // classifyTransferで収入として判定される振替のみカウント
-    const classification = classifyTransfer(
+    const classification = await classifyTransfer(
       db,
       accountIdSet,
       t.accountId,
@@ -227,11 +227,11 @@ export function buildExpenseSum(_accountIds: number[]) {
  * その通常トランザクションでカウントされる。振替としてのみ記録されている場合は
  * 支出としてカウントする必要がある。
  */
-export function getDeduplicatedTransferExpense(
+export async function getDeduplicatedTransferExpense(
   db: Db,
   accountIds: number[],
   dateCondition?: string,
-): Map<string, number> {
+): Promise<Map<string, number>> {
   // 振替トランザクションを取得
   // グループ外→グループ内への振替を支出としてカウント
   const query = db
@@ -252,7 +252,7 @@ export function getDeduplicatedTransferExpense(
       ),
     );
 
-  const transfers = query.all();
+  const transfers = await query;
 
   // 重複除外: (date, amount, accountId, transferTargetAccountId) でユニーク化
   const seen = new Set<string>();
@@ -263,7 +263,7 @@ export function getDeduplicatedTransferExpense(
 
     // 振替先アカウントで同一日・同一金額の通常トランザクションがある場合は除外
     // （既に通常支出としてカウントされているため）
-    const existingNormalTx = db
+    const existingNormalTxRows = await db
       .select({ id: schema.transactions.id })
       .from(schema.transactions)
       .where(
@@ -273,8 +273,8 @@ export function getDeduplicatedTransferExpense(
           eq(schema.transactions.amount, t.amount),
           sql`${schema.transactions.type} IN ('income', 'expense')`,
         ),
-      )
-      .get();
+      );
+    const existingNormalTx = existingNormalTxRows[0];
 
     if (existingNormalTx) continue;
 
@@ -290,36 +290,36 @@ export function getDeduplicatedTransferExpense(
 }
 
 // Get the latest monthly summary (dynamically calculated from transactions, filtered by group)
-export function getLatestMonthlySummary(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getLatestMonthlySummary(groupIdParam?: string, db: Db = getDb()) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return undefined;
 
   // Get the most recent month's summary
-  const summaries = getMonthlySummaries({ limit: 1, groupId }, db);
+  const summaries = await getMonthlySummaries({ limit: 1, groupId }, db);
   return summaries[0];
 }
 
 // Get monthly summaries calculated from transactions (filtered by group)
 // トランザクションがない月も含めて、最古の月から現在月までの全ての月を返す
-export function getMonthlySummaries(
+export async function getMonthlySummaries(
   options?: { limit?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = resolveGroupId(db, options?.groupId);
+  const groupId = await resolveGroupId(db, options?.groupId);
   if (!groupId) return [];
 
   // Get account IDs for group
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) return [];
 
   // 最古の月を取得
-  const oldestResult = db
+  const oldestResultRows = await db
     .select({
       month: sql<string>`MIN(substr(${schema.transactions.date}, 1, 7))`.as("month"),
     })
     .from(schema.transactions)
-    .where(inArray(schema.transactions.accountId, accountIds))
-    .get();
+    .where(inArray(schema.transactions.accountId, accountIds));
+  const oldestResult = oldestResultRows[0];
 
   if (!oldestResult?.month) return [];
 
@@ -329,7 +329,7 @@ export function getMonthlySummaries(
   const allMonths = generateMonthRange(oldestResult.month, currentMonth);
 
   // 通常の収入/支出を集計
-  const regularResults = db
+  const regularResults = await db
     .select({
       month: sql<string>`substr(${schema.transactions.date}, 1, 7)`.as("month"),
       regularIncome: buildRegularIncomeSum(),
@@ -337,8 +337,7 @@ export function getMonthlySummaries(
     })
     .from(schema.transactions)
     .where(buildGroupTransactionCondition(accountIds))
-    .groupBy(sql`substr(${schema.transactions.date}, 1, 7)`)
-    .all();
+    .groupBy(sql`substr(${schema.transactions.date}, 1, 7)`);
 
   // DB結果をMapに変換
   const resultMap = new Map<string, { regularIncome: number; totalExpense: number }>();
@@ -350,10 +349,10 @@ export function getMonthlySummaries(
   }
 
   // 重複除外した振替収入を取得
-  const transferIncomeMap = getDeduplicatedTransferIncome(db, accountIds);
+  const transferIncomeMap = await getDeduplicatedTransferIncome(db, accountIds);
 
   // 重複除外した振替支出を取得
-  const transferExpenseMap = getDeduplicatedTransferExpense(db, accountIds);
+  const transferExpenseMap = await getDeduplicatedTransferExpense(db, accountIds);
 
   // 全ての月に対してサマリーを生成（トランザクションがない月は0で埋める）
   const summaries = allMonths.map((month) => {
@@ -377,22 +376,22 @@ export function getMonthlySummaries(
 }
 
 // Get all available months from oldest transaction to current month (filtered by group)
-export function getAvailableMonths(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getAvailableMonths(groupIdParam?: string, db: Db = getDb()) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return [];
 
   // Get account IDs for group
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) return [];
 
   // Get the oldest month from transactions
-  const oldestResult = db
+  const oldestResultRows = await db
     .select({
       month: sql<string>`MIN(substr(${schema.transactions.date}, 1, 7))`.as("month"),
     })
     .from(schema.transactions)
-    .where(inArray(schema.transactions.accountId, accountIds))
-    .get();
+    .where(inArray(schema.transactions.accountId, accountIds));
+  const oldestResult = oldestResultRows[0];
 
   if (!oldestResult?.month) return [];
 
@@ -406,16 +405,20 @@ export function getAvailableMonths(groupIdParam?: string, db: Db = getDb()) {
 }
 
 // Get monthly summary for a specific month (dynamically calculated from transactions, filtered by group)
-export function getMonthlySummaryByMonth(month: string, groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getMonthlySummaryByMonth(
+  month: string,
+  groupIdParam?: string,
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return undefined;
 
   // Get account IDs for group
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) return undefined;
 
   // 通常の収入/支出を集計
-  const result = db
+  const resultRows = await db
     .select({
       regularIncome: buildRegularIncomeSum(),
       totalExpense: buildExpenseSum(accountIds),
@@ -423,18 +426,18 @@ export function getMonthlySummaryByMonth(month: string, groupIdParam?: string, d
     .from(schema.transactions)
     .where(
       and(like(schema.transactions.date, `${month}%`), buildGroupTransactionCondition(accountIds)),
-    )
-    .get();
+    );
+  const result = resultRows[0];
 
   if (!result) return undefined;
 
   // 重複除外した振替収入を取得
-  const transferIncomeMap = getDeduplicatedTransferIncome(db, accountIds, month);
+  const transferIncomeMap = await getDeduplicatedTransferIncome(db, accountIds, month);
   const transferIncome = transferIncomeMap.get(month) || 0;
   const totalIncome = (result.regularIncome || 0) + transferIncome;
 
   // 重複除外した振替支出を取得
-  const transferExpenseMap = getDeduplicatedTransferExpense(db, accountIds, month);
+  const transferExpenseMap = await getDeduplicatedTransferExpense(db, accountIds, month);
   const transferExpense = transferExpenseMap.get(month) || 0;
   const totalExpense = (result.totalExpense || 0) + transferExpense;
 
@@ -459,17 +462,21 @@ export function getMonthlySummaryByMonth(month: string, groupIdParam?: string, d
 // 共通グループがない場合:
 // - グループ内→グループ外: 収入としてカウント
 // - グループ外→グループ内: 支出としてカウント（ただし既存の通常TXと重複する場合は除外）
-export function getMonthlyCategoryTotals(month: string, groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getMonthlyCategoryTotals(
+  month: string,
+  groupIdParam?: string,
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return [];
 
   // Get account IDs for group
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) return [];
 
   // Aggregate transactions by category for the given month
   // Includes: regular income/expense + transfers from/to outside the group
-  const results = db
+  const results = await db
     .select({
       category: schema.transactions.category,
       type: schema.transactions.type,
@@ -486,8 +493,7 @@ export function getMonthlyCategoryTotals(month: string, groupIdParam?: string, d
       schema.transactions.type,
       schema.transactions.transferTargetAccountId,
       schema.transactions.accountId,
-    )
-    .all();
+    );
 
   // Transform results: transfers should be treated as income/expense based on classifyTransfer
   // This matches the logic in getMonthlySummaryByMonth / getDeduplicatedTransferIncome
@@ -502,7 +508,7 @@ export function getMonthlyCategoryTotals(month: string, groupIdParam?: string, d
 
     if (r.type === "transfer" && r.transferTargetAccountId !== null && r.accountId !== null) {
       // classifyTransferで振替の分類を判定
-      const classification = classifyTransfer(
+      const classification = await classifyTransfer(
         db,
         accountIdSet,
         r.accountId,
@@ -541,11 +547,11 @@ export function getMonthlyCategoryTotals(month: string, groupIdParam?: string, d
 }
 
 // Get year-to-date summary (dynamically calculated from transactions, filtered by group)
-export function getYearToDateSummary(
+export async function getYearToDateSummary(
   options?: { year?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = resolveGroupId(db, options?.groupId);
+  const groupId = await resolveGroupId(db, options?.groupId);
   const targetYear = options?.year || new Date().getFullYear();
 
   if (!groupId) {
@@ -561,7 +567,7 @@ export function getYearToDateSummary(
   const yearPrefix = `${targetYear}-`;
 
   // Get account IDs for group
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) {
     return {
       year: targetYear,
@@ -573,7 +579,7 @@ export function getYearToDateSummary(
   }
 
   // 通常の収入/支出を集計
-  const result = db
+  const resultRows = await db
     .select({
       regularIncome: buildRegularIncomeSum(),
       totalExpense: buildExpenseSum(accountIds),
@@ -587,11 +593,11 @@ export function getYearToDateSummary(
         like(schema.transactions.date, `${yearPrefix}%`),
         buildGroupTransactionCondition(accountIds),
       ),
-    )
-    .get();
+    );
+  const result = resultRows[0];
 
   // 重複除外した振替収入を取得（年全体）
-  const transferIncomeMap = getDeduplicatedTransferIncome(db, accountIds, yearPrefix);
+  const transferIncomeMap = await getDeduplicatedTransferIncome(db, accountIds, yearPrefix);
   let transferIncome = 0;
   for (const amount of transferIncomeMap.values()) {
     transferIncome += amount;
@@ -599,7 +605,7 @@ export function getYearToDateSummary(
   const totalIncome = (result?.regularIncome || 0) + transferIncome;
 
   // 重複除外した振替支出を取得（年全体）
-  const transferExpenseMap = getDeduplicatedTransferExpense(db, accountIds, yearPrefix);
+  const transferExpenseMap = await getDeduplicatedTransferExpense(db, accountIds, yearPrefix);
   let transferExpense = 0;
   for (const amount of transferExpenseMap.values()) {
     transferExpense += amount;
@@ -616,9 +622,13 @@ export function getYearToDateSummary(
 }
 
 // Get expense breakdown by fixed vs variable (filtered by group)
-export function getExpenseByFixedVariable(month: string, groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
-  const categoryTotals = getMonthlyCategoryTotals(month, groupId ?? undefined, db);
+export async function getExpenseByFixedVariable(
+  month: string,
+  groupIdParam?: string,
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, groupIdParam);
+  const categoryTotals = await getMonthlyCategoryTotals(month, groupId ?? undefined, db);
 
   // Return empty result if no group
   if (!groupId) {
@@ -628,11 +638,10 @@ export function getExpenseByFixedVariable(month: string, groupIdParam?: string, 
     };
   }
 
-  const targets = db
+  const targets = await db
     .select()
     .from(schema.spendingTargets)
-    .where(eq(schema.spendingTargets.groupId, groupId))
-    .all();
+    .where(eq(schema.spendingTargets.groupId, groupId));
 
   const fixedCategoryNames = new Set(
     targets.filter((t) => t.type === "fixed").map((t) => t.categoryName),

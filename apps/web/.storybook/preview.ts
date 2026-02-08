@@ -2,7 +2,7 @@ import type { Preview } from "@storybook/nextjs-vite";
 import "../src/app/globals.css";
 
 // Note: @moneyforward-daily-action/db is aliased to a mock in vitest.config.ts
-// to prevent better-sqlite3 (native addon) from being loaded in the browser
+// to prevent pg (native addon) from being loaded in the browser
 
 const preview: Preview = {
   initialGlobals: {

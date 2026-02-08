@@ -24,13 +24,13 @@
     "@moneyforward-daily-action/db": "workspace:*",
     "@moneyforward-daily-action/meta": "workspace:*",
     "@slack/web-api": "7.13.0",
-    "better-sqlite3": "catalog:",
     "drizzle-orm": "catalog:",
-    "otpauth": "^9.3.6"
+    "otpauth": "^9.3.6",
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -43,13 +43,16 @@ cronjob:
   failedJobsHistoryLimit: 3
   backoffLimit: 2
 
-# 永続化設定
-persistence:
-  enabled: true
-  storageClassName: ""
-  accessMode: ReadWriteOnce
-  size: 1Gi
-  existingClaim: ""
+# データベース設定
+database:
+  # 接続情報（個別指定）
+  host: ""
+  port: "5432"
+  user: ""
+  password: ""
+  name: ""
+  # Secret から接続情報を取得する場合
+  existingSecret: ""
 
 # 認証情報
 credentials:
@@ -84,12 +87,3 @@ ingress:
 service:
   type: ClusterIP
   port: 80
-
-# Pod Affinity（PVC 共有のため同一ノードに配置）
-affinity:
-  podAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      - labelSelector:
-          matchLabels:
-            app.kubernetes.io/name: mf-dashboard
-        topologyKey: kubernetes.io/hostname

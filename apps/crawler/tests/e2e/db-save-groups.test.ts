@@ -1,11 +1,10 @@
 import type { Browser, BrowserContext } from "playwright";
-import { getDb, schema } from "@moneyforward-daily-action/db";
+import { getDb, closeDb, schema } from "@moneyforward-daily-action/db";
 import {
   saveScrapedData,
   saveGroupOnlyData,
 } from "@moneyforward-daily-action/db/repository/save-scraped-data";
 import { eq } from "drizzle-orm";
-import path from "node:path";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "../../src/data-builder.js";
@@ -21,16 +20,13 @@ import {
   withNewPage,
 } from "./helpers.js";
 
-const TEST_DB_DIR = path.resolve(process.cwd(), "tests/e2e");
-const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-groups-moneyforward.db");
-
 let browser: Browser;
 let context: BrowserContext;
 let scrapeResult: ScrapeResult;
 
 beforeAll(async () => {
-  // テスト用 DB パスを環境変数で設定
-  setupTestDb(TEST_DB_PATH);
+  // テスト用 DB を環境変数で設定
+  await setupTestDb();
 
   // auth state を使ってブラウザ起動 & スクレイプ
   ({ browser, context } = await launchLoggedInContext());
@@ -50,14 +46,14 @@ beforeAll(async () => {
       const noGroupData = result.groupDataList.find((gd) => isNoGroup(gd.group.id));
       if (noGroupData) {
         const scrapedData = buildScrapedData(result.globalData, noGroupData);
-        saveScrapedData(db, scrapedData);
+        await saveScrapedData(db, scrapedData);
       }
 
       // 各グループはグループ固有データのみ保存
       for (const groupData of result.groupDataList) {
         if (isNoGroup(groupData.group.id)) continue;
         const scrapedData = buildGroupOnlyScrapedData(groupData);
-        saveGroupOnlyData(db, scrapedData);
+        await saveGroupOnlyData(db, scrapedData);
       }
 
       return result;
@@ -69,80 +65,76 @@ afterAll(async () => {
   await context?.close();
   await browser?.close();
   // テスト後にクリーンアップ
-  cleanupTestDb(TEST_DB_PATH);
+  await cleanupTestDb();
+  await closeDb();
 });
 
 describe("グループ保存（新フロー）", () => {
-  test("全グループが保存される", () => {
+  test("全グループが保存される", async () => {
     const db = getDb();
-    const groups = db.select().from(schema.groups).all();
+    const groups = await db.select().from(schema.groups);
     expect(groups.length).toBe(scrapeResult.groupDataList.length);
   });
 
-  test("正確に1つのグループがisCurrentである", () => {
+  test("正確に1つのグループがisCurrentである", async () => {
     const db = getDb();
-    const groups = db.select().from(schema.groups).all();
+    const groups = await db.select().from(schema.groups);
     const currentGroups = groups.filter((g) => g.isCurrent);
     expect(currentGroups).toHaveLength(1);
   });
 
-  test("isCurrentのグループはdefaultGroupと一致する", () => {
+  test("isCurrentのグループはdefaultGroupと一致する", async () => {
     if (!scrapeResult.defaultGroup) return;
 
     const db = getDb();
-    const currentGroup = db
-      .select()
-      .from(schema.groups)
-      .where(eq(schema.groups.isCurrent, true))
-      .get();
+    const rows = await db.select().from(schema.groups).where(eq(schema.groups.isCurrent, true));
+    const currentGroup = rows[0];
 
     expect(currentGroup?.id).toBe(scrapeResult.defaultGroup.id);
   });
 });
 
 describe("グループ-アカウント紐付け", () => {
-  test("各グループにアカウントが紐付けられる", () => {
+  test("各グループにアカウントが紐付けられる", async () => {
     const db = getDb();
-    const groupAccounts = db.select().from(schema.groupAccounts).all();
+    const groupAccounts = await db.select().from(schema.groupAccounts);
     expect(groupAccounts.length).toBeGreaterThan(0);
   });
 
-  test("「グループ選択なし」に全アカウントが紐付けられる", () => {
+  test("「グループ選択なし」に全アカウントが紐付けられる", async () => {
     const db = getDb();
     const noGroupId = "0";
-    const noGroupAccounts = db
+    const noGroupAccounts = await db
       .select()
       .from(schema.groupAccounts)
-      .where(eq(schema.groupAccounts.groupId, noGroupId))
-      .all();
+      .where(eq(schema.groupAccounts.groupId, noGroupId));
 
-    const allAccounts = db.select().from(schema.accounts).all();
+    const allAccounts = await db.select().from(schema.accounts);
     // unknownアカウントを除外した数と比較
     const realAccounts = allAccounts.filter((a) => a.mfId !== "unknown");
     expect(noGroupAccounts.length).toBe(realAccounts.length);
   });
 
-  test("各グループのアカウント数が正しい", () => {
+  test("各グループのアカウント数が正しい", async () => {
     const db = getDb();
 
     for (const groupData of scrapeResult.groupDataList) {
       const groupId = groupData.group.id;
-      const dbLinks = db
+      const dbLinks = await db
         .select()
         .from(schema.groupAccounts)
-        .where(eq(schema.groupAccounts.groupId, groupId))
-        .all();
+        .where(eq(schema.groupAccounts.groupId, groupId));
 
       const scrapedAccountCount = groupData.registeredAccounts.accounts.length;
       expect(dbLinks.length).toBe(scrapedAccountCount);
     }
   });
 
-  test("同じアカウントが複数グループに紐付けできる", () => {
+  test("同じアカウントが複数グループに紐付けできる", async () => {
     const db = getDb();
 
     // アカウントIDごとにグループ数をカウント
-    const groupAccounts = db.select().from(schema.groupAccounts).all();
+    const groupAccounts = await db.select().from(schema.groupAccounts);
     const accountGroupCount = new Map<number, number>();
 
     for (const ga of groupAccounts) {
@@ -157,16 +149,15 @@ describe("グループ-アカウント紐付け", () => {
 });
 
 describe("資産履歴（グループ別）", () => {
-  test("各グループに資産履歴が保存される", () => {
+  test("各グループに資産履歴が保存される", async () => {
     const db = getDb();
 
     for (const groupData of scrapeResult.groupDataList) {
       const groupId = groupData.group.id;
-      const history = db
+      const history = await db
         .select()
         .from(schema.assetHistory)
-        .where(eq(schema.assetHistory.groupId, groupId))
-        .all();
+        .where(eq(schema.assetHistory.groupId, groupId));
 
       // assetHistoryのポイント数と一致
       if (groupData.assetHistory.points.length > 0) {
@@ -177,18 +168,17 @@ describe("資産履歴（グループ別）", () => {
 });
 
 describe("予算データ（グループ別）", () => {
-  test("予算データがあるグループには保存される", () => {
+  test("予算データがあるグループには保存される", async () => {
     const db = getDb();
 
     for (const groupData of scrapeResult.groupDataList) {
       if (!groupData.spendingTargets) continue;
 
       const groupId = groupData.group.id;
-      const targets = db
+      const targets = await db
         .select()
         .from(schema.spendingTargets)
-        .where(eq(schema.spendingTargets.groupId, groupId))
-        .all();
+        .where(eq(schema.spendingTargets.groupId, groupId));
 
       expect(targets.length).toBe(groupData.spendingTargets.categories.length);
     }

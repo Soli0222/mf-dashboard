@@ -1,8 +1,7 @@
 import type { Browser, BrowserContext } from "playwright";
-import { getDb, schema } from "@moneyforward-daily-action/db";
+import { getDb, closeDb, schema } from "@moneyforward-daily-action/db";
 import { saveScrapedData } from "@moneyforward-daily-action/db/repository/save-scraped-data";
 import { eq } from "drizzle-orm";
-import path from "node:path";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { scrape } from "../../src/scraper.js";
 import {
@@ -15,15 +14,12 @@ import {
   withNewPage,
 } from "./helpers.js";
 
-const TEST_DB_DIR = path.resolve(process.cwd(), "tests/e2e");
-const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-moneyforward.db");
-
 let browser: Browser;
 let context: BrowserContext;
 
 beforeAll(async () => {
-  // テスト用 DB パスを環境変数で設定
-  setupTestDb(TEST_DB_PATH);
+  // テスト用 DB を環境変数で設定
+  await setupTestDb();
 
   // auth state を使ってブラウザ起動 & スクレイプ
   ({ browser, context } = await launchLoggedInContext());
@@ -34,7 +30,7 @@ beforeAll(async () => {
     const data = await withErrorScreenshot(page, "db-save-test-error.png", () =>
       scrape(page, { skipRefresh: true }),
     );
-    saveScrapedData(getDb(), data);
+    await saveScrapedData(getDb(), data);
   });
 });
 
@@ -42,70 +38,69 @@ afterAll(async () => {
   await context?.close();
   await browser?.close();
   // テスト後にクリーンアップ
-  cleanupTestDb(TEST_DB_PATH);
+  await cleanupTestDb();
+  await closeDb();
 });
 
 describe("DB保存", () => {
-  test("グループが保存される", () => {
+  test("グループが保存される", async () => {
     const db = getDb();
-    const groups = db.select().from(schema.groups).all();
+    const groups = await db.select().from(schema.groups);
     expect(groups.length).toBeGreaterThan(0);
     expect(groups.some((g) => g.isCurrent)).toBe(true);
   });
 
-  test("口座が保存される", () => {
+  test("口座が保存される", async () => {
     const db = getDb();
-    const accounts = db.select().from(schema.accounts).all();
+    const accounts = await db.select().from(schema.accounts);
     expect(accounts.length).toBeGreaterThan(0);
   });
 
-  test("資産カテゴリが保存される", () => {
+  test("資産カテゴリが保存される", async () => {
     const db = getDb();
-    const categories = db.select().from(schema.assetCategories).all();
+    const categories = await db.select().from(schema.assetCategories);
     expect(categories.length).toBeGreaterThan(0);
   });
 
-  test("日次スナップショットが保存される", () => {
+  test("日次スナップショットが保存される", async () => {
     const db = getDb();
-    const snapshots = db.select().from(schema.dailySnapshots).all();
+    const snapshots = await db.select().from(schema.dailySnapshots);
     expect(snapshots.length).toBeGreaterThan(0);
     const latestSnapshot = snapshots[snapshots.length - 1];
     const today = new Date().toISOString().split("T")[0];
     expect(latestSnapshot.date).toBe(today);
   });
 
-  test("保有銘柄が保存される", () => {
+  test("保有銘柄が保存される", async () => {
     const db = getDb();
-    const holdings = db.select().from(schema.holdings).all();
+    const holdings = await db.select().from(schema.holdings);
     expect(holdings.length).toBeGreaterThan(0);
     const assetHoldings = holdings.filter((h) => h.type === "asset");
     expect(assetHoldings.length).toBeGreaterThan(0);
   });
 
-  test("評価額が保存される", () => {
+  test("評価額が保存される", async () => {
     const db = getDb();
-    const snapshots = db.select().from(schema.dailySnapshots).all();
+    const snapshots = await db.select().from(schema.dailySnapshots);
     const latestSnapshot = snapshots[snapshots.length - 1];
-    const holdingValues = db
+    const holdingValues = await db
       .select()
       .from(schema.holdingValues)
-      .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id))
-      .all();
+      .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id));
     expect(holdingValues.length).toBeGreaterThan(0);
   });
 
-  test("投資銘柄の詳細値が保存される", () => {
+  test("投資銘柄の詳細値が保存される", async () => {
     const db = getDb();
-    const snapshots = db.select().from(schema.dailySnapshots).all();
+    const snapshots = await db.select().from(schema.dailySnapshots);
     const latestSnapshot = snapshots[snapshots.length - 1];
     // 投資信託か株式のholding valuesを取得
-    const holdingValues = db
+    const holdingValues = await db
       .select()
       .from(schema.holdingValues)
       .innerJoin(schema.holdings, eq(schema.holdings.id, schema.holdingValues.holdingId))
       .innerJoin(schema.assetCategories, eq(schema.assetCategories.id, schema.holdings.categoryId))
-      .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id))
-      .all();
+      .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id));
 
     // 投資信託か株式のレコードを探す
     const investmentHoldings = holdingValues.filter(
@@ -125,17 +120,17 @@ describe("DB保存", () => {
     }
   });
 
-  test("口座ステータスが保存される", () => {
+  test("口座ステータスが保存される", async () => {
     const db = getDb();
-    const accountStatuses = db.select().from(schema.accountStatuses).all();
+    const accountStatuses = await db.select().from(schema.accountStatuses);
     expect(accountStatuses.length).toBeGreaterThan(0);
   });
 
   // Note: monthly_summary, yearly_summary, and monthly_category_totals are now calculated dynamically from transactions
 
-  test("トランザクションが保存される", () => {
+  test("トランザクションが保存される", async () => {
     const db = getDb();
-    const transactions = db.select().from(schema.transactions).all();
+    const transactions = await db.select().from(schema.transactions);
     expect(transactions.length).toBeGreaterThan(0);
     // mfId がユニーク
     const mfIds = transactions.map((t) => t.mfId);

@@ -19,8 +19,8 @@ export async function generateMetadata({ params }: PageProps<"/cf/[month]">): Pr
   };
 }
 
-export function CFMonthContent({ month, groupId }: { month: string; groupId?: string }) {
-  const summary = getMonthlySummaryByMonth(month, groupId);
+export async function CFMonthContent({ month, groupId }: { month: string; groupId?: string }) {
+  const summary = await getMonthlySummaryByMonth(month, groupId);
 
   if (!summary) {
     notFound();

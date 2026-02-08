@@ -28,7 +28,6 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV DB_PATH=/data/moneyforward.db
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs

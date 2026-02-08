@@ -28,3 +28,6 @@ apps/crawler/tests/e2e/screenshots/
 .worktrees/
 docs/plans
 error-*.png
+
+.config/postgres.env
+.config/apps.env

@@ -6,7 +6,7 @@ export async function generateMetadata({
   params,
 }: PageProps<"/[groupId]/accounts/[id]">): Promise<Metadata> {
   const { id, groupId } = await params;
-  const account = getAccountByMfId(id, groupId);
+  const account = await getAccountByMfId(id, groupId);
   return {
     title: account?.name ?? "アカウント詳細",
   };

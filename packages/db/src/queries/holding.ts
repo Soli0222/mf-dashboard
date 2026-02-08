@@ -8,13 +8,13 @@ const INVESTMENT_CATEGORIES = ["株式(現物)", "投資信託"];
  * 最新のスナップショットを取得
  * スナップショットは全アカウント共通で1つ作成される
  */
-export function getLatestSnapshot(db: Db = getDb()) {
-  return db
+export async function getLatestSnapshot(db: Db = getDb()) {
+  const rows = await db
     .select()
     .from(schema.dailySnapshots)
     .orderBy(desc(schema.dailySnapshots.id))
-    .limit(1)
-    .get();
+    .limit(1);
+  return rows[0];
 }
 
 /**
@@ -46,19 +46,19 @@ export function buildHoldingWhereCondition(
  * 保有資産の最新値を取得
  * snapshotIdで駆動し、グループでフィルタリング
  */
-export function getHoldingsWithLatestValues(groupIdParam?: string, db: Db = getDb()) {
-  const latestSnapshot = getLatestSnapshot(db);
+export async function getHoldingsWithLatestValues(groupIdParam?: string, db: Db = getDb()) {
+  const latestSnapshot = await getLatestSnapshot(db);
 
   if (!latestSnapshot) {
     return [];
   }
 
-  const groupId = resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? getAccountIdsForGroup(db, groupId) : [];
+  const groupId = await resolveGroupId(db, groupIdParam);
+  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(latestSnapshot.id, accountIds);
 
-  return db
+  return await db
     .select({
       id: schema.holdings.id,
       name: schema.holdings.name,
@@ -81,28 +81,31 @@ export function getHoldingsWithLatestValues(groupIdParam?: string, db: Db = getD
     .innerJoin(schema.holdings, eq(schema.holdings.id, schema.holdingValues.holdingId))
     .leftJoin(schema.assetCategories, eq(schema.assetCategories.id, schema.holdings.categoryId))
     .leftJoin(schema.accounts, eq(schema.accounts.id, schema.holdings.accountId))
-    .where(whereCondition)
-    .all();
+    .where(whereCondition);
 }
 
 /**
  * 特定アカウントの保有資産を取得
  * アカウントがグループに所属しない場合は空配列を返す
  */
-export function getHoldingsByAccountId(accountId: number, groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getHoldingsByAccountId(
+  accountId: number,
+  groupIdParam?: string,
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return [];
 
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0 || !accountIds.includes(accountId)) return [];
 
-  const latestSnapshot = getLatestSnapshot(db);
+  const latestSnapshot = await getLatestSnapshot(db);
 
   if (!latestSnapshot) {
     return [];
   }
 
-  return db
+  return await db
     .select({
       id: schema.holdings.id,
       name: schema.holdings.name,
@@ -128,8 +131,7 @@ export function getHoldingsByAccountId(accountId: number, groupIdParam?: string,
         eq(schema.holdingValues.snapshotId, latestSnapshot.id),
         eq(schema.holdings.accountId, accountId),
       ),
-    )
-    .all();
+    );
 }
 
 export interface HoldingWithDailyChange {
@@ -145,18 +147,18 @@ export interface HoldingWithDailyChange {
  * 日次変動がある保有資産を取得
  * daily_changeがnullでないもののみ返す
  */
-export function getHoldingsWithDailyChange(
+export async function getHoldingsWithDailyChange(
   groupIdParam?: string,
   db: Db = getDb(),
-): HoldingWithDailyChange[] {
-  const latestSnapshot = getLatestSnapshot(db);
+): Promise<HoldingWithDailyChange[]> {
+  const latestSnapshot = await getLatestSnapshot(db);
 
   if (!latestSnapshot) {
     return [];
   }
 
-  const groupId = resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? getAccountIdsForGroup(db, groupId) : [];
+  const groupId = await resolveGroupId(db, groupIdParam);
+  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(
     latestSnapshot.id,
@@ -164,7 +166,7 @@ export function getHoldingsWithDailyChange(
     isNotNull(schema.holdingValues.dailyChange),
   );
 
-  return db
+  return (await db
     .select({
       id: schema.holdings.id,
       name: schema.holdings.name,
@@ -177,15 +179,14 @@ export function getHoldingsWithDailyChange(
     .innerJoin(schema.holdings, eq(schema.holdings.id, schema.holdingValues.holdingId))
     .leftJoin(schema.assetCategories, eq(schema.assetCategories.id, schema.holdings.categoryId))
     .leftJoin(schema.accounts, eq(schema.accounts.id, schema.holdings.accountId))
-    .where(whereCondition)
-    .all() as HoldingWithDailyChange[];
+    .where(whereCondition)) as HoldingWithDailyChange[];
 }
 
 /**
  * 投資銘柄を保有しているかチェック
  */
-export function hasInvestmentHoldings(groupIdParam?: string, db: Db = getDb()) {
-  const holdings = getHoldingsWithLatestValues(groupIdParam, db);
+export async function hasInvestmentHoldings(groupIdParam?: string, db: Db = getDb()) {
+  const holdings = await getHoldingsWithLatestValues(groupIdParam, db);
   return holdings.some(
     (h) => h.categoryName !== null && INVESTMENT_CATEGORIES.includes(h.categoryName),
   );

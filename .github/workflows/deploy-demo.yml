@@ -33,6 +33,20 @@ jobs:
     needs: check
     if: needs.check.outputs.should-run == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mf
+          POSTGRES_PASSWORD: mf
+          POSTGRES_DB: mf_dashboard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mf"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -42,7 +56,7 @@ jobs:
       - name: Build Next.js demo app
         run: pnpm build:demo
         env:
-          DB_PATH: ${{ github.workspace }}/data/demo.db
+          DATABASE_URL: postgresql://mf:mf@localhost:5432/mf_dashboard
           GITHUB_PAGES: "true"
           NEXT_PUBLIC_GITHUB_ORG: ${{ github.repository_owner }}
           NEXT_PUBLIC_GITHUB_REPO: ${{ github.event.repository.name }}

@@ -4,20 +4,20 @@ import * as schema from "./schema/schema";
 import { createTestDb, resetTestDb, closeTestDb } from "./test-helpers";
 import { now, parseAmount, convertToIsoDate, upsertById, upsertOne, getOrCreate } from "./utils";
 
-type Db = ReturnType<typeof createTestDb>;
+type Db = Awaited<ReturnType<typeof createTestDb>>;
 
 let db: Db;
 
-beforeAll(() => {
-  db = createTestDb();
+beforeAll(async () => {
+  db = await createTestDb();
 });
 
-afterAll(() => {
-  closeTestDb(db);
+afterAll(async () => {
+  await closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
+beforeEach(async () => {
+  await resetTestDb(db);
 });
 
 describe("now", () => {
@@ -90,8 +90,8 @@ describe("convertToIsoDate", () => {
 });
 
 describe("upsertById", () => {
-  test("新規レコードを作成して ID を返す", () => {
-    const id = upsertById(
+  test("新規レコードを作成して ID を返す", async () => {
+    const id = await upsertById(
       db,
       schema.assetCategories,
       eq(schema.assetCategories.name, "テストカテゴリ"),
@@ -100,13 +100,13 @@ describe("upsertById", () => {
     );
     expect(id).toBeGreaterThan(0);
 
-    const result = db.select().from(schema.assetCategories).all();
+    const result = await db.select().from(schema.assetCategories);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("テストカテゴリ");
   });
 
-  test("既存レコードを更新して同じ ID を返す", () => {
-    const id1 = upsertById(
+  test("既存レコードを更新して同じ ID を返す", async () => {
+    const id1 = await upsertById(
       db,
       schema.assetCategories,
       eq(schema.assetCategories.name, "テストカテゴリ"),
@@ -114,7 +114,7 @@ describe("upsertById", () => {
       { name: "テストカテゴリ" },
     );
 
-    const id2 = upsertById(
+    const id2 = await upsertById(
       db,
       schema.assetCategories,
       eq(schema.assetCategories.name, "テストカテゴリ"),
@@ -123,14 +123,14 @@ describe("upsertById", () => {
     );
 
     expect(id1).toBe(id2);
-    const result = db.select().from(schema.assetCategories).all();
+    const result = await db.select().from(schema.assetCategories);
     expect(result).toHaveLength(1);
   });
 });
 
 describe("upsertOne", () => {
-  test("新規レコードを作成して isNew: true を返す", () => {
-    const { record, isNew } = upsertOne<{ id: number; name: string }>(
+  test("新規レコードを作成して isNew: true を返す", async () => {
+    const { record, isNew } = await upsertOne<{ id: number; name: string }>(
       db,
       schema.assetCategories,
       eq(schema.assetCategories.name, "テストカテゴリ"),
@@ -142,8 +142,8 @@ describe("upsertOne", () => {
     expect(record.name).toBe("テストカテゴリ");
   });
 
-  test("既存レコードを更新して isNew: false を返す", () => {
-    upsertOne(
+  test("既存レコードを更新して isNew: false を返す", async () => {
+    await upsertOne(
       db,
       schema.assetCategories,
       eq(schema.assetCategories.name, "テストカテゴリ"),
@@ -151,7 +151,7 @@ describe("upsertOne", () => {
       { name: "テストカテゴリ" },
     );
 
-    const { record, isNew } = upsertOne<{ id: number; name: string }>(
+    const { record, isNew } = await upsertOne<{ id: number; name: string }>(
       db,
       schema.assetCategories,
       eq(schema.assetCategories.name, "テストカテゴリ"),
@@ -165,23 +165,28 @@ describe("upsertOne", () => {
 });
 
 describe("getOrCreate", () => {
-  test("新規レコードを作成して ID を返す", () => {
-    const id = getOrCreate(db, schema.assetCategories, schema.assetCategories.name, "新規カテゴリ");
+  test("新規レコードを作成して ID を返す", async () => {
+    const id = await getOrCreate(
+      db,
+      schema.assetCategories,
+      schema.assetCategories.name,
+      "新規カテゴリ",
+    );
     expect(id).toBeGreaterThan(0);
 
-    const result = db.select().from(schema.assetCategories).all();
+    const result = await db.select().from(schema.assetCategories);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("新規カテゴリ");
   });
 
-  test("既存レコードの ID を返す（新規作成しない）", () => {
-    const id1 = getOrCreate(
+  test("既存レコードの ID を返す（新規作成しない）", async () => {
+    const id1 = await getOrCreate(
       db,
       schema.assetCategories,
       schema.assetCategories.name,
       "既存カテゴリ",
     );
-    const id2 = getOrCreate(
+    const id2 = await getOrCreate(
       db,
       schema.assetCategories,
       schema.assetCategories.name,
@@ -189,7 +194,7 @@ describe("getOrCreate", () => {
     );
 
     expect(id1).toBe(id2);
-    const result = db.select().from(schema.assetCategories).all();
+    const result = await db.select().from(schema.assetCategories);
     expect(result).toHaveLength(1);
   });
 });

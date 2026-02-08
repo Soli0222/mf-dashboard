@@ -1,4 +1,4 @@
-import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { eq, type SQL } from "drizzle-orm";
 import type { Db } from "./index";
 
@@ -16,61 +16,62 @@ export function now(): string {
  * If a record matching the condition exists, update it. Otherwise, insert a new one.
  * Returns the record's ID.
  */
-export function upsertById<T extends { id: number }>(
+export async function upsertById<T extends { id: number }>(
   db: Db,
-  table: SQLiteTable,
+  table: PgTable,
   condition: SQL,
   insertValues: Record<string, unknown>,
   updateValues: Record<string, unknown>,
-): number {
-  const existing = db.select().from(table).where(condition).get() as T | undefined;
+): Promise<number> {
+  const rows = await db.select().from(table).where(condition);
+  const existing = rows[0] as T | undefined;
 
   if (existing) {
-    db.update(table)
+    await db
+      .update(table)
       .set({ ...updateValues, updatedAt: now() })
-      .where(condition)
-      .run();
+      .where(condition);
     return existing.id;
   }
 
-  const result = db
+  const result = (await db
     .insert(table)
     .values({ ...insertValues, createdAt: now(), updatedAt: now() })
-    .returning()
-    .get() as { id: number };
+    .returning()) as { id: number }[];
 
-  return result.id;
+  return result[0].id;
 }
 
 /**
  * Upsert a record and return it along with whether it was newly created.
  */
-export function upsertOne<T extends { id: number }>(
+export async function upsertOne<T extends { id: number }>(
   db: Db,
-  table: SQLiteTable,
+  table: PgTable,
   condition: SQL,
   insertValues: Record<string, unknown>,
   updateValues: Record<string, unknown>,
-): { record: T; isNew: boolean } {
-  const existing = db.select().from(table).where(condition).get() as T | undefined;
+): Promise<{ record: T; isNew: boolean }> {
+  const rows = await db.select().from(table).where(condition);
+  const existing = rows[0] as T | undefined;
 
   if (existing) {
-    db.update(table)
+    await db
+      .update(table)
       .set({ ...updateValues, updatedAt: now() })
-      .where(condition)
-      .run();
+      .where(condition);
 
-    const updated = db.select().from(table).where(condition).get() as T;
+    const updatedRows = await db.select().from(table).where(condition);
+    const updated = updatedRows[0] as T;
     return { record: updated, isNew: false };
   }
 
-  const result = db
+  const result = (await db
     .insert(table)
     .values({ ...insertValues, createdAt: now(), updatedAt: now() })
-    .returning()
-    .get() as T;
+    .returning()) as T[];
 
-  return { record: result, isNew: true };
+  return { record: result[0], isNew: true };
 }
 
 // ============================================================================
@@ -81,29 +82,27 @@ export function upsertOne<T extends { id: number }>(
  * Get or create a record by name.
  * Returns the record's ID.
  */
-export function getOrCreate(
+export async function getOrCreate(
   db: Db,
-  table: SQLiteTable,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  nameColumn: SQLiteColumn<any>,
+  table: PgTable,
+  //
+  nameColumn: PgColumn<any>,
   name: string,
-): number {
-  const existing = db.select().from(table).where(eq(nameColumn, name)).get() as
-    | { id: number }
-    | undefined;
+): Promise<number> {
+  const rows = await db.select().from(table).where(eq(nameColumn, name));
+  const existing = rows[0] as { id: number } | undefined;
 
   if (existing) {
     return existing.id;
   }
 
   const timestamp = now();
-  const result = db
+  const result = (await db
     .insert(table)
     .values({ name, createdAt: timestamp, updatedAt: timestamp })
-    .returning()
-    .get() as { id: number };
+    .returning()) as { id: number }[];
 
-  return result.id;
+  return result[0].id;
 }
 
 /** 金額文字列をパースして整数に変換する */

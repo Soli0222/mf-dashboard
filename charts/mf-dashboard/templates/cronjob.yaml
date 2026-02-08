@@ -22,10 +22,6 @@ spec:
             app.kubernetes.io/component: crawler
         spec:
           restartPolicy: OnFailure
-          {{- with $.Values.affinity }}
-          affinity:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           containers:
             - name: crawler
               image: "{{ $.Values.crawler.image.repository }}:{{ $.Values.crawler.image.tag }}"
@@ -34,17 +30,9 @@ spec:
                 - secretRef:
                     name: {{ $.Values.credentials.existingSecret | default (printf "%s-credentials" (include "mf-dashboard.fullname" $)) }}
               env:
-                - name: DB_PATH
-                  value: /data/moneyforward.db
+                {{- include "mf-dashboard.databaseEnv" $ | nindent 16 }}
                 - name: CRAWLER_TIMEOUT_MS
-                  value: {{ .Values.crawler.timeoutMs | quote }}
-              volumeMounts:
-                - name: data
-                  mountPath: /data
+                  value: {{ $.Values.crawler.timeoutMs | quote }}
               resources:
                 {{- toYaml $.Values.crawler.resources | nindent 16 }}
-          volumes:
-            - name: data
-              persistentVolumeClaim:
-                claimName: {{ $.Values.persistence.existingClaim | default (printf "%s-data" (include "mf-dashboard.fullname" $)) }}
 {{- end }}

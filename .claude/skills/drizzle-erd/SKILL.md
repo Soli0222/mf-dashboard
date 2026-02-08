@@ -74,14 +74,14 @@ erDiagram
 From Drizzle:
 
 ```typescript
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey(),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").unique(),
 });
 
-export const posts = sqliteTable("posts", {
-  id: integer("id").primaryKey(),
+export const posts = pgTable("posts", {
+  id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
   title: text("title").notNull(),
 });

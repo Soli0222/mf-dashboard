@@ -23,7 +23,4 @@ COPY tsconfig.json ./
 # Build (if needed)
 RUN pnpm --filter @moneyforward-daily-action/db build 2>/dev/null || true
 
-# Default environment
-ENV DB_PATH=/data/moneyforward.db
-
 CMD ["pnpm", "--filter", "@moneyforward-daily-action/crawler", "start"]

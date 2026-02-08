@@ -13,14 +13,14 @@ import { formatLastUpdated } from "../../../lib/format";
 
 export async function generateMetadata({ params }: PageProps<"/accounts/[id]">): Promise<Metadata> {
   const { id } = await params;
-  const account = getAccountByMfId(id);
+  const account = await getAccountByMfId(id);
   return {
     title: account?.name ?? "アカウント詳細",
   };
 }
 
-export function AccountDetailContent({ id, groupId }: { id: string; groupId?: string }) {
-  const account = getAccountByMfId(id, groupId);
+export async function AccountDetailContent({ id, groupId }: { id: string; groupId?: string }) {
+  const account = await getAccountByMfId(id, groupId);
   if (!account) {
     notFound();
   }
