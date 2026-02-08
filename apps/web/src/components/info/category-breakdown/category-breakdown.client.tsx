@@ -1,12 +1,13 @@
 "use client";
 
 import { ChevronDown, List, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import type { CategoryData, SubCategoryData } from "./types";
 import { getChartColorArray } from "../../../lib/colors";
 import { formatCurrency, formatDateShort } from "../../../lib/format";
 import { cn } from "../../../lib/utils";
 import { chartTooltipStyle } from "../../charts/chart-tooltip";
+import { ClientResponsiveContainer } from "../../charts/client-responsive-container";
 import { AmountDisplay, getAmountColorClass } from "../../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { CategoryAccordion } from "./category-accordion";
@@ -59,7 +60,7 @@ export function CategoryBreakdownClient({
         {type === "income" && incomeChartData.length > 0 ? (
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
             <div className="w-32 h-32 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
+              <ClientResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={incomeChartData}
@@ -79,7 +80,7 @@ export function CategoryBreakdownClient({
                     contentStyle={chartTooltipStyle}
                   />
                 </PieChart>
-              </ResponsiveContainer>
+              </ClientResponsiveContainer>
             </div>
             <div className="flex-1 min-w-0 w-full space-y-3 text-sm">
               {incomeSubCategories.map((sub, index) => (

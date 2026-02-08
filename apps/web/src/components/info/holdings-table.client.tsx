@@ -2,11 +2,12 @@
 
 import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import { getChartColorArray } from "../../lib/colors";
 import { formatCurrency, formatPercent } from "../../lib/format";
 import { cn } from "../../lib/utils";
 import { chartTooltipStyle } from "../charts/chart-tooltip";
+import { ClientResponsiveContainer } from "../charts/client-responsive-container";
 import { AmountDisplay, getAmountColorClass } from "../ui/amount-display";
 import { CardContent } from "../ui/card";
 import { Pagination } from "../ui/pagination";
@@ -102,7 +103,7 @@ function CategoryCard({
       <div className="flex flex-col sm:flex-row sm:items-start gap-6 p-4">
         {/* Donut chart */}
         <div className="w-56 h-56 shrink-0 self-center sm:self-auto">
-          <ResponsiveContainer width="100%" height="100%">
+          <ClientResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={chartData}
@@ -122,7 +123,7 @@ function CategoryCard({
                 contentStyle={chartTooltipStyle}
               />
             </PieChart>
-          </ResponsiveContainer>
+          </ClientResponsiveContainer>
         </div>
 
         {/* Holdings list */}

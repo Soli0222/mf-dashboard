@@ -3,22 +3,13 @@
 import type { Route } from "next";
 import { TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-  ReferenceLine,
-} from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ReferenceLine } from "recharts";
 import { roundToNice } from "../../lib/chart";
 import { semanticColors } from "../../lib/colors";
 import { getShortMonth } from "../../lib/format";
 import { buildGroupPath } from "../../lib/url";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
+import { ClientResponsiveContainer } from "../charts/client-responsive-container";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 interface MonthlySummary {
@@ -147,7 +138,7 @@ export function MonthlyIncomeExpenseChartClient({ data, groupId }: MonthlyIncome
         <CardTitle icon={TrendingUp}>月別収支推移</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={350}>
+        <ClientResponsiveContainer width="100%" height={350}>
           <ComposedChart
             data={chartData}
             margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
@@ -232,7 +223,7 @@ export function MonthlyIncomeExpenseChartClient({ data, groupId }: MonthlyIncome
               dot={false}
             />
           </ComposedChart>
-        </ResponsiveContainer>
+        </ClientResponsiveContainer>
       </CardContent>
     </Card>
   );

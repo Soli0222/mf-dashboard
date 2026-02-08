@@ -9,13 +9,13 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 import { CHART_PERIOD_OPTIONS, filterDataByPeriod, type Period } from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { formatCurrency } from "../../lib/format";
 import { cn } from "../../lib/utils";
 import { chartTooltipStyle } from "../charts/chart-tooltip";
+import { ClientResponsiveContainer } from "../charts/client-responsive-container";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { PeriodToggle } from "../ui/period-toggle";
@@ -159,7 +159,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={height}>
+        <ClientResponsiveContainer width="100%" height={height}>
           <RechartsLineChart
             data={filteredData}
             margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
@@ -205,7 +205,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
                 />
               ))}
           </RechartsLineChart>
-        </ResponsiveContainer>
+        </ClientResponsiveContainer>
       </CardContent>
     </Card>
   );
