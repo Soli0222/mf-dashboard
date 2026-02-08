@@ -2,7 +2,7 @@
 
 ## 概要
 
-MoneyForward Me Dashboard は、MoneyForward Me からデータを自動取得し、SQLite データベースに保存、静的サイトとして可視化を行うためのシステムです。GitHub Actions による定期実行と Cloudflare Pages によるホスティングを組み合わせ、完全に自動化された家計管理ダッシュボードを提供します。
+MoneyForward Me Dashboard は、MoneyForward Me からデータを自動取得し、PostgreSQL データベースに保存、Web ダッシュボードとして可視化を行うためのシステムです。Kubernetes 上で CronJob による定期実行と Next.js (standalone) によるサーバーサイドレンダリングを組み合わせ、完全に自動化された家計管理ダッシュボードを提供します。
 
 ---
 
@@ -15,7 +15,7 @@ MoneyForward Me Dashboard は、MoneyForward Me からデータを自動取得�
 5. [データベーススキーマ](#データベーススキーマ)
 6. [スクレイピング処理](#スクレイピング処理)
 7. [Web ダッシュボード](#web-ダッシュボード)
-8. [GitHub Actions](#github-actions)
+8. [CI](#ci)
 9. [環境変数・設定](#環境変数設定)
 10. [開発ガイドライン](#開発ガイドライン)
 11. [セキュリティ](#セキュリティ)
@@ -26,21 +26,27 @@ MoneyForward Me Dashboard は、MoneyForward Me からデータを自動取得�
 
 ### 1. 定期自動更新
 
-- GitHub Actions の cron スケジュールで毎日 2 回自動実行（JST 6:50 および 15:20）
+- Kubernetes CronJob で毎日 2 回自動実行（JST 6:50 および 15:20）
 - MoneyForward Me の「一括更新」ボタンを自動クリックし、全登録金融機関のデータを更新
-- 1Password Service Account を利用したセキュアな認証情報管理
+- 環境変数（`MF_USERNAME` / `MF_PASSWORD` / `MF_TOTP_SECRET`）による認証情報管理
+- `otpauth` ライブラリによる TOTP ワンタイムパスワード生成
 
-### 2. Slack 通知
+### 2. On-demand ISR
+
+- スクレイピング完了後、`POST /api/revalidate` を呼び出してキャッシュを即時無効化
+- フォールバックとして 1 時間ごとの時間ベース revalidation を設定
+
+### 3. Slack 通知
 
 - 更新結果を Slack チャンネルに自動投稿
 - 前日との差分情報を含む
 
-### 3. カスタムフック
+### 4. カスタムフック
 
 - スクレイピング時に任意の処理を実行可能
 - Playwright の `Page` オブジェクトを利用した柔軟なカスタマイズ
 
-### 4. データ可視化
+### 5. データ可視化
 
 - 資産推移グラフ
 - 収支内訳（カテゴリ別）
@@ -55,24 +61,38 @@ MoneyForward Me Dashboard は、MoneyForward Me からデータを自動取得�
 
 ```mermaid
 graph LR
-    A[GitHub Actions<br/>Cron] -->|1. 実行| B[Crawler<br/>Playwright]
-    B -->|2. OTP取得| E[1Password<br/>Service Account]
-    E -->|3. 認証情報| B
+    A[Kubernetes<br/>CronJob] -->|1. 実行| B[Crawler<br/>Playwright]
+    B -->|2. OTP生成| E[otpauth<br/>MF_TOTP_SECRET]
+    E -->|3. 認証| B
     B -->|4. アクセス| F[MoneyForward Me]
     F -->|5. データ| B
-    B -->|6. 保存| C[SQLite<br/>Database]
-    C -->|7. 更新完了| A
-    A -->|8. Git Commit| D[Cloudflare Worker<br/>Next.js Static Export]
+    B -->|6. 保存| C[(PostgreSQL)]
+    B -->|7. Revalidate| D[Next.js<br/>standalone + ISR]
+    C -->|8. クエリ| D
+    D -->|9. 配信| G[Ingress<br/>Traefik]
 ```
 
 ### 処理の流れ
 
-1. **定期実行**: GitHub Actions の cron スケジュールで自動実行
-2. **認証**: 1Password Service Account から OTP を取得
+1. **定期実行**: Kubernetes CronJob のスケジュールで自動実行
+2. **認証**: 環境変数の TOTP シークレットから OTP を生成してログイン
 3. **データ取得**: Playwright を使用して MoneyForward Me からデータをスクレイピング
-4. **データ保存**: SQLite データベースに構造化して保存
-5. **コミット**: SQLite ファイルをリポジトリにコミット
-6. **ビルド・デプロイ**: Cloudflare Pages で Next.js の静的サイトをビルドして公開
+4. **データ保存**: PostgreSQL データベースに構造化して保存
+5. **キャッシュ無効化**: `POST /api/revalidate` で Next.js の ISR キャッシュを即時更新
+6. **Slack 通知**: 更新結果を Slack に投稿（オプション）
+
+### インフラ構成
+
+| コンポーネント | 実装                                                      |
+| -------------- | --------------------------------------------------------- |
+| Web サーバー   | Next.js 16 standalone (Deployment)                        |
+| クローラー     | Playwright ベース (CronJob ×2 スケジュール)               |
+| データベース   | PostgreSQL 17                                             |
+| Ingress        | Traefik + cert-manager (Let's Encrypt)                    |
+| コンテナ管理   | Helm Chart (`charts/mf-dashboard/`)                       |
+| ローカル開発   | Docker Compose (`compose.yaml`)                           |
+| CI             | GitHub Actions (`ci.yml`)                                 |
+| キャッシュ戦略 | ISR (`revalidate = 3600`) + On-demand (`/api/revalidate`) |
 
 ---
 
@@ -86,17 +106,17 @@ mf-dashboard/
 │   ├── crawler/          # MoneyForward スクレイパー
 │   └── web/              # Next.js ダッシュボード
 ├── packages/
-│   ├── db/               # データベーススキーマ & リポジトリ
+│   ├── db/               # データベーススキーマ & リポジトリ (PostgreSQL)
 │   ├── db-e2e/           # DB E2E テスト
 │   └── meta/             # カテゴリ定義 & URL
-├── data/
-│   ├── moneyforward.db   # 本番データベース
-│   └── demo.db           # デモ用データベース
+├── charts/
+│   └── mf-dashboard/     # Helm Chart (K8s デプロイ)
+├── build/                # Kaniko ビルド設定
 ├── docs/
 │   ├── setup.md          # セットアップガイド
 │   └── architecture/     # アーキテクチャドキュメント
 └── .github/
-    └── workflows/        # GitHub Actions ワークフロー
+    └── workflows/        # GitHub Actions (CI)
 ```
 
 ---
@@ -110,7 +130,7 @@ MoneyForward Me からデータをスクレイピングするパッケージ。
 **主要依存関係:**
 
 - `playwright`: ブラウザ自動化
-- `@1password/sdk`: 1Password 連携
+- `otpauth`: TOTP ワンタイムパスワード生成
 - `@slack/web-api`: Slack 通知
 - `drizzle-orm` / `pg`: DB 操作（PostgreSQL）
 
@@ -121,7 +141,9 @@ apps/crawler/src/
 ├── index.ts              # エントリーポイント
 ├── scraper.ts            # メインスクレイピングロジック
 ├── logger.ts             # ロギングユーティリティ
+├── revalidate.ts         # On-demand ISR トリガー
 ├── auth/                 # 認証関連
+│   ├── credentials.ts    # 認証情報取得 (env vars)
 │   ├── login.ts          # ログイン処理
 │   └── state.ts          # 認証状態管理
 ├── scrapers/             # 各ページのスクレイパー
@@ -151,7 +173,7 @@ apps/crawler/src/
 
 ### apps/web
 
-Next.js 16 ベースの静的サイトダッシュボード。
+Next.js 16 ベースの SSR ダッシュボード（standalone 出力 + ISR）。
 
 **主要依存関係:**
 
@@ -183,15 +205,14 @@ apps/web/src/
 
 **スクリプト:**
 
-| コマンド         | 説明                         |
-| ---------------- | ---------------------------- |
-| `dev`            | 開発サーバー起動             |
-| `dev:demo`       | デモデータで開発サーバー起動 |
-| `build`          | 本番ビルド                   |
-| `storybook`      | Storybook 起動               |
-| `test:unit`      | ユニットテスト               |
-| `test:storybook` | Storybook テスト             |
-| `test:e2e`       | E2E テスト                   |
+| コマンド         | 説明             |
+| ---------------- | ---------------- |
+| `dev`            | 開発サーバー起動 |
+| `build`          | 本番ビルド       |
+| `storybook`      | Storybook 起動   |
+| `test:unit`      | ユニットテスト   |
+| `test:storybook` | Storybook テスト |
+| `test:e2e`       | E2E テスト       |
 
 ---
 
@@ -247,7 +268,7 @@ packages/db/src/
 
 ## データベーススキーマ
 
-SQLite データベースで以下のテーブルを管理。
+PostgreSQL データベースで以下のテーブルを管理。
 
 ### テーブル一覧
 
@@ -292,7 +313,7 @@ erDiagram
 
 | フィールド  | 型      | 説明                |
 | ----------- | ------- | ------------------- |
-| id          | INTEGER | 主キー              |
+| id          | SERIAL  | 主キー              |
 | mfId        | TEXT    | MoneyForward ID     |
 | name        | TEXT    | 口座名              |
 | type        | TEXT    | "自動連携" / "手動" |
@@ -303,7 +324,7 @@ erDiagram
 
 | フィールド  | 型      | 説明                              |
 | ----------- | ------- | --------------------------------- |
-| id          | INTEGER | 主キー                            |
+| id          | SERIAL  | 主キー                            |
 | mfId        | TEXT    | MoneyForward ID                   |
 | date        | TEXT    | 取引日                            |
 | category    | TEXT    | 大項目                            |
@@ -338,12 +359,12 @@ erDiagram
 
 ### スクレイピングモード
 
-データベースの存在により自動判定されます。
+データベース接続の可否により自動判定されます。
 
-| 条件            | モード    | 動作                 |
-| --------------- | --------- | -------------------- |
-| DB が存在する   | `month`   | 当月のみ取得         |
-| DB が存在しない | `history` | 過去 13 ヶ月分を取得 |
+| 条件        | モード    | 動作                 |
+| ----------- | --------- | -------------------- |
+| DB 接続可能 | `month`   | 当月のみ取得         |
+| DB 接続不可 | `history` | 過去 13 ヶ月分を取得 |
 
 ### 振替ロジック
 
@@ -391,65 +412,64 @@ erDiagram
 
 ---
 
-## GitHub Actions
+## CI
 
-### ワークフロー一覧
+### GitHub Actions ワークフロー
 
-| ファイル名         | 説明                  |
-| ------------------ | --------------------- |
-| `daily-update.yml` | 日次自動更新          |
-| `ci.yml`           | CI（テスト・リント）  |
-| `deploy-demo.yml`  | デモサイトデプロイ    |
-| `e2e-crawler.yml`  | クローラー E2E テスト |
+| ファイル名 | 説明                 |
+| ---------- | -------------------- |
+| `ci.yml`   | CI（テスト・リント） |
 
-### daily-update.yml
-
-```yaml
-schedule:
-  # JST 6:50
-  - cron: "50 21 * * *"
-  # JST 15:20
-  - cron: "20 6 * * *"
-```
-
-**処理内容:**
-
-1. 環境をセットアップ
-2. 認証状態をキャッシュから復元
-3. クローラーを実行
-4. 認証状態をキャッシュに保存
-5. データベースを Git コミット & プッシュ
+> 定期実行（スクレイピング）は Kubernetes CronJob で行うため、GitHub Actions には CI のみが残っています。
 
 ---
 
 ## 環境変数・設定
 
-### GitHub Actions Variables
+### 共通（Crawler / Web）
 
-| キー               | 必須 | 説明                           |
-| ------------------ | ---- | ------------------------------ |
-| `RUN_TASK`         | ✅   | `true` で crontab 実行を有効化 |
-| `CACHE_AUTH_STATE` |      | 認証状態のキャッシュ           |
+| 変数名              | 必須 | 説明                                            |
+| ------------------- | ---- | ----------------------------------------------- |
+| `POSTGRES_USER`     | ✅   | PostgreSQL ユーザー名                           |
+| `POSTGRES_PASSWORD` | ✅   | PostgreSQL パスワード                           |
+| `POSTGRES_DB`       | ✅   | PostgreSQL データベース名                       |
+| `POSTGRES_HOST`     | ✅   | PostgreSQL ホスト                               |
+| `POSTGRES_PORT`     |      | PostgreSQL ポート（デフォルト: 5432）           |
+| `DATABASE_URL`      |      | PostgreSQL 接続 URL（個別変数の代わりに使用可） |
 
-### GitHub Actions Secrets
+> `DATABASE_URL` または `POSTGRES_USER` + `POSTGRES_PASSWORD` + `POSTGRES_DB` + `POSTGRES_HOST` のいずれかが必要です。
 
-| キー                       | 必須 | 説明                                 |
-| -------------------------- | ---- | ------------------------------------ |
-| `OP_SERVICE_ACCOUNT_TOKEN` | ✅   | 1Password サービスアカウントトークン |
-| `OP_VAULT`                 | ✅   | 保管庫 ID                            |
-| `OP_ITEM`                  | ✅   | MoneyForward アイテム ID             |
-| `OP_TOTP_FIELD`            | ✅   | OTP フィールド ID                    |
-| `SLACK_BOT_TOKEN`          |      | Slack Bot トークン                   |
-| `SLACK_CHANNEL_ID`         |      | Slack チャンネル ID                  |
-| `DASHBOARD_URL`            |      | デプロイ先 URL                       |
+### Crawler 専用
 
-### ローカル開発用 (.env)
+| 変数名               | 必須 | 説明                                             |
+| -------------------- | ---- | ------------------------------------------------ |
+| `MF_USERNAME`        | ✅   | MoneyForward Me ログインメールアドレス           |
+| `MF_PASSWORD`        | ✅   | MoneyForward Me ログインパスワード               |
+| `MF_TOTP_SECRET`     | ✅   | MoneyForward Me TOTP シークレットキー            |
+| `REVALIDATION_URL`   |      | ISR 無効化エンドポイント URL                     |
+| `REVALIDATION_TOKEN` |      | ISR 無効化トークン                               |
+| `SLACK_BOT_TOKEN`    |      | Slack Bot トークン                               |
+| `SLACK_CHANNEL_ID`   |      | Slack チャンネル ID                              |
+| `DASHBOARD_URL`      |      | Slack 投稿でダッシュボードリンクを生成           |
+| `SCRAPE_MODE`        |      | `month` / `history` を強制指定（通常は自動判定） |
+| `SKIP_REFRESH`       |      | `true` で一括更新をスキップ                      |
+| `DEBUG`              |      | `true` でデバッグログ有効                        |
+| `HEADED`             |      | `true` でヘッドフルモード（GUI 表示）            |
 
-```bash
-OP_SERVICE_ACCOUNT_TOKEN=xxx
-OP_VAULT=xxx
-OP_ITEM=xxx
-OP_TOTP_FIELD=xxx
+### Web 専用
+
+| 変数名               | 必須 | 説明               |
+| -------------------- | ---- | ------------------ |
+| `REVALIDATION_TOKEN` |      | ISR 無効化トークン |
+
+### ローカル開発
+
+ローカル開発用の環境変数ファイル構成:
+
+```
+.config/
+├── apps.env         # MF_USERNAME, MF_PASSWORD, MF_TOTP_SECRET, SLACK_*, REVALIDATION_*
+└── postgres.env     # POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
 ```
 
 ---
@@ -471,12 +491,12 @@ pnpm install
 ### 開発コマンド
 
 ```bash
-# デモデータで開発
-pnpm dev:demo
+# ローカル開発（Docker Compose）
+docker compose up -d db     # PostgreSQL 起動
+pnpm dev                    # 開発サーバー起動
 
-# 実データで開発
-pnpm db:dev  # スクレイピング実行
-pnpm dev     # 開発サーバー起動
+# スクレイピング
+docker compose up crawler   # クローラー実行
 
 # テスト
 pnpm test
@@ -515,17 +535,17 @@ pnpm format
 
 ### 推奨設定
 
-| サービス        | 推奨設定                      |
-| --------------- | ----------------------------- |
-| GitHub          | Passkey                       |
-| MoneyForward Me | ワンタイムパスワード          |
-| Cloudflare      | Cloudflare One でアクセス制限 |
+| サービス        | 推奨設定                                       |
+| --------------- | ---------------------------------------------- |
+| GitHub          | Passkey                                        |
+| MoneyForward Me | ワンタイムパスワード                           |
+| Kubernetes      | Ingress でアクセス制限 / Secret で認証情報管理 |
 
 ### 注意事項
 
-- **プライベートリポジトリで運用**（SQLite にデータが含まれるため）
 - Passkey のみだとクローリング時にログインできないため、OTP 設定必須
-- Cloudflare Pages のプレビュー URL は無効化推奨
+- 認証情報は Kubernetes Secret または `.config/*.env` で管理（Git にコミットしない）
+- ISR revalidation エンドポイントはトークン認証で保護
 
 ---
 

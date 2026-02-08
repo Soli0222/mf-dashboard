@@ -9,6 +9,7 @@ The following rules must always be followed. Code violating these rules will be 
 - [ ] All tables MUST have `createdAt: text("created_at").notNull()`
 - [ ] All tables MUST have `updatedAt: text("updated_at").notNull()`
 - [ ] Foreign keys MUST specify `onDelete` (cascade/set null)
+- [ ] When adding/modifying DB schema, MUST run `pnpm --filter @moneyforward-daily-action/db exec drizzle-kit generate` to create migration
 - [ ] When adding/modifying DB schema, MUST update `docs/architecture/database-schema.md` to reflect current schema structure
 
 ### Component Creation
@@ -197,32 +198,26 @@ Monorepo using pnpm workspaces + Turborepo.
 
 #### Scraping Mode (Auto-detected)
 
-Scraping mode is automatically determined by database existence:
+Scraping mode is automatically determined by database availability:
 
-- **DB exists** (`data/moneyforward.db`): `month` mode (fetches current month only)
-- **DB does not exist**: `history` mode (fetches past 13 months)
-
-**To re-fetch historical data**, delete the database:
-
-```bash
-rm data/moneyforward.db
-pnpm --filter @moneyforward-daily-action/crawler start
-```
+- **DB available** (PostgreSQL connection configured): `month` mode (fetches current month only)
+- **DB not available** (no connection): `history` mode (fetches past 13 months)
 
 **For testing**: Use `SCRAPE_MODE=history` or `SCRAPE_MODE=month` to force a specific mode
 
 ### Database
 
-- SQLite database is located at `data/moneyforward.db`
+- PostgreSQL database (via Drizzle ORM + `pg`)
+- Local development: `docker compose up -d db` to start PostgreSQL
+- Connection configured via `DATABASE_URL` or `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_HOST` env vars
 - Generate migration: `pnpm --filter @moneyforward-daily-action/db exec drizzle-kit generate`
 - Apply migration: `pnpm --filter @moneyforward-daily-action/db exec drizzle-kit migrate`
 - Database Studio: `pnpm db:studio`
 
 ### Test & Storybook Data
 
-- When creating dummy data for tests or Storybook, **do not reference** `data/moneyforward.db` (contains personal information)
-- `data/demo.db` can be used as reference
-- Run web app with demo data: `pnpm --filter @moneyforward-daily-action/web dev:demo`
+- When creating dummy data for tests or Storybook, **never use real data**
+- Use `packages/db/src/test-helpers.ts` for test fixtures
 
 ### Testing
 
