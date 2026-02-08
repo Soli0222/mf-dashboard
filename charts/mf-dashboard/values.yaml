@@ -17,7 +17,7 @@ crawler:
       cpu: "1000m"
   timeoutMs: 1200000 # 20分
   # helm install 時に post-install hook Job としてクローラーを実行するかどうか
-  initOnInstall: false
+  initOnInstall: true
 
 web:
   image:
@@ -46,19 +46,20 @@ cronjob:
 # データベース設定
 database:
   # 接続情報
-  host: "mf-cluster-rw"
+  host: ""
   port: "5432"
-  user: "mf"
+  user: ""
   password: ""
-  name: "mf-dashboard"
+  name: ""
   # 既存の Secret からパスワードを取得する場合
   existingSecret:
-    name: "mf-cluster-app"        # Secret 名（空の場合は自動生成 Secret を使用）
-    passwordKey: "password"  # Secret 内のパスワードのキー名
+    name: ""        # Secret 名（空の場合は自動生成 Secret を使用）
+    passwordKey: ""  # Secret 内のパスワードのキー名
 
 # 認証情報
 credentials:
-  existingSecret: "mf-dashboard-credentials"
+  # 既存の Secret 名（空の場合は自動生成 Secret を使用）
+  existingSecret: ""
   mfUsername: ""
   mfPassword: ""
   mfTotpSecret: ""
@@ -72,19 +73,15 @@ slack:
 
 # Ingress 設定
 ingress:
-  enabled: true
-  className: traefik
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
+  enabled: false
+  className: ""
+  annotations: {}
   hosts:
-    - host: mf-dashboard.str08.net
+    - host: ""
       paths:
         - path: /
           pathType: Prefix
-  tls:
-    - hosts:
-        - mf-dashboard.str08.net
-      secretName: mf-dashboard.str08.net-dns01
+  tls: []
 
 # Service 設定
 service:
