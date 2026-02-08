@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
 import { upsertGroup } from "./groups";
-import { createSnapshot } from "./snapshots";
+import { createSnapshot, hasExistingData } from "./snapshots";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -31,5 +31,17 @@ describe("createSnapshot", () => {
     const id1 = await createSnapshot(db, "g1", "2025-04-26");
     const id2 = await createSnapshot(db, "g1", "2025-04-26");
     expect(id1).not.toBe(id2);
+  });
+});
+
+describe("hasExistingData", () => {
+  test("DBが空の場合は false を返す", async () => {
+    expect(await hasExistingData(db)).toBe(false);
+  });
+
+  test("スナップショットが存在する場合は true を返す", async () => {
+    await upsertGroup(db, { id: "g1", name: "test", isCurrent: true });
+    await createSnapshot(db, "g1", "2025-04-26");
+    expect(await hasExistingData(db)).toBe(true);
   });
 });

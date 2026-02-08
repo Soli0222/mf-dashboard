@@ -7,6 +7,7 @@ import {
   saveScrapedData,
   saveGroupOnlyData,
 } from "@moneyforward-daily-action/db/repository/save-scraped-data";
+import { hasExistingData } from "@moneyforward-daily-action/db/repository/snapshots";
 import {
   hasTransactionsForMonth,
   saveTransactionsForMonth,
@@ -39,19 +40,23 @@ async function main() {
   const skipRefresh = process.env.SKIP_REFRESH === "true";
   const authState = hasAuthState() ? "configured" : "none";
   const dbAvailable = isDatabaseAvailable();
-  const scrapeMode = process.env.SCRAPE_MODE || (dbAvailable ? "month" : "history");
-  const isHistoryMode = scrapeMode === "history";
-
-  section("Options");
-  log(`SKIP_REFRESH:   ${skipRefresh}`);
-  log(`SCRAPE_MODE:    ${scrapeMode} (DB available: ${dbAvailable})`);
-  log(`DEBUG:          ${isDebug}`);
-  log(`HEADED:         ${isHeaded}`);
-  log(`AUTH_STATE:     ${authState}`);
 
   section("Setup");
   log("Initializing database");
   const db = await initDb();
+
+  // DBにデータが存在するかチェックしてスクレイピングモードを自動判定
+  // 初回実行（DB空）の場合は history モードで過去データを取得
+  const dbHasData = dbAvailable ? await hasExistingData(db) : false;
+  const scrapeMode = process.env.SCRAPE_MODE || (dbHasData ? "month" : "history");
+  const isHistoryMode = scrapeMode === "history";
+
+  section("Options");
+  log(`SKIP_REFRESH:   ${skipRefresh}`);
+  log(`SCRAPE_MODE:    ${scrapeMode} (DB has data: ${dbHasData})`);
+  log(`DEBUG:          ${isDebug}`);
+  log(`HEADED:         ${isHeaded}`);
+  log(`AUTH_STATE:     ${authState}`);
 
   const browser = await chromium.launch({
     headless: !isHeaded,
