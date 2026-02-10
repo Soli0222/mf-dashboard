@@ -8,7 +8,7 @@ metadata:
     {{- include "mf-dashboard.labels" $ | nindent 4 }}
     app.kubernetes.io/component: crawler
 spec:
-  schedule: {{ $schedule | quote }}
+  schedule: {{ $schedule.cron | quote }}
   concurrencyPolicy: {{ $.Values.cronjob.concurrencyPolicy }}
   successfulJobsHistoryLimit: {{ $.Values.cronjob.successfulJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ $.Values.cronjob.failedJobsHistoryLimit }}
@@ -33,6 +33,8 @@ spec:
                 {{- include "mf-dashboard.databaseEnv" $ | nindent 16 }}
                 - name: CRAWLER_TIMEOUT_MS
                   value: {{ $.Values.crawler.timeoutMs | quote }}
+                - name: SKIP_REFRESH
+                  value: {{ $schedule.skipRefresh | default false | quote }}
                 - name: REVALIDATION_URL
                   value: "http://{{ include "mf-dashboard.fullname" $ }}-web.{{ $.Release.Namespace }}/api/revalidate"
               resources:
