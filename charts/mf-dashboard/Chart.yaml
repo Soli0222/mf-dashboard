@@ -3,4 +3,4 @@ name: mf-dashboard
 description: MoneyForward Me Dashboard - 家計管理ダッシュボード
 type: application
 version: 0.2.0
-appVersion: "1.0.0"
+appVersion: "1.1.0"
