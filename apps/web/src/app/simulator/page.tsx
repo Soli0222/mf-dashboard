@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getHoldingsWithLatestValues } from "@moneyforward-daily-action/db";
+import { getHoldingsWithLatestValues, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { CompoundSimulator } from "../../components/charts/compound-simulator/compound-simulator";
 import { PageLayout } from "../../components/layout/page-layout";
 
@@ -8,6 +8,8 @@ export const metadata: Metadata = {
 };
 
 export async function SimulatorContent({ groupId }: { groupId?: string }) {
+  if (!isDatabaseAvailable()) return null;
+
   const holdings = await getHoldingsWithLatestValues(groupId);
   const investmentHoldings = holdings.filter(
     (h) => h.categoryName && h.categoryName.includes("投資信託"),
