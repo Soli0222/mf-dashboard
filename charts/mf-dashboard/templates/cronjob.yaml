@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/component: crawler
 spec:
   schedule: {{ $schedule.cron | quote }}
+  timeZone: {{ $schedule.timeZone | default $.Values.cronjob.timeZone | quote }}
   concurrencyPolicy: {{ $.Values.cronjob.concurrencyPolicy }}
   successfulJobsHistoryLimit: {{ $.Values.cronjob.successfulJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ $.Values.cronjob.failedJobsHistoryLimit }}

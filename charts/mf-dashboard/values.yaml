@@ -35,11 +35,13 @@ web:
 
 # CronJob 設定
 cronjob:
+  timeZone: "Asia/Tokyo"
   schedules:
     - cron: "30 10 * * *" # JST 10:30
       skipRefresh: false
-    - cron: "30 18 * * *" # JST 18:30
+    - cron: "30 18 * * *" # UTC 18:30
       skipRefresh: true
+      timeZone: "UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
